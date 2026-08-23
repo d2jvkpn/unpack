@@ -1,6 +1,10 @@
 # unpack
 
-Extract ZIP, TAR, TAR.GZ, and TGZ archives with safe paths and optional legacy Chinese filenames.
+Extract ZIP, TAR, TAR.GZ, and TGZ archives with safe paths, a smart default destination, an
+overridable output directory (`--output-dir`), optional overwrite of existing files, and optional
+legacy Chinese filename decoding.
+
+<https://github.com/d2jvkpn/unpack>
 
 ## Build
 
@@ -23,7 +27,7 @@ Alternatively, copy the binary produced by the build command to a directory on y
 ## Usage
 
 ```text
-unpack [--cn] [--output-dir DIR] ARCHIVE...
+unpack [--cn] [--output-dir DIR] [--overwrite] [--version] ARCHIVE...
 ```
 
 One or more archive paths are required. Supported filename extensions are `.zip`, `.tar`,
@@ -32,7 +36,30 @@ failure in one archive does not prevent later archives from being processed. The
 zero when all archives succeed, one when any archive fails processing, and two for invalid command
 usage.
 
-`--output-dir` has no short `-o` alias.
+`--output-dir` has no short `-o` alias. `--overwrite` and `--version` have no short aliases either.
+
+Before extracting each archive, `unpack` prints the archive path and the resolved output
+directory, for example:
+
+```text
+Extracting: photos.zip
+Output directory: /home/user/photos
+```
+
+## Version information
+
+`unpack --version` prints the version, commit, and build time, and exits without extracting
+anything:
+
+```text
+version:    0.1.0
+commit:     a0fbda3
+build_time: 2026-08-23T09:36:37Z
+```
+
+`commit` and `build_time` are only populated when the binary is built with `make build` (or one of
+the other `make build-*` targets), which injects them via `-ldflags`. A `go build` invocation
+without those ldflags reports `commit: none` and `build_time: unknown`.
 
 ## Output rules
 
@@ -46,8 +73,19 @@ contains one top-level directory, that wrapper directory is stripped: `wrapper/n
 `DIR/note.txt`. A sole top-level file is not stripped, and multiple top-level items retain their
 paths.
 
-Existing files are never overwritten. Each preserved file is reported as
-`Skipping existing file: NAME`, and extraction continues.
+`--output-dir` is worth setting explicitly in two common cases where the smart default is not
+enough:
+
+- The archive has several loose top-level items and you don't want them scattered directly into
+  the current directory — pass `--output-dir` to collect everything under one directory you name.
+- The archive is a release package whose filename encodes OS/arch (e.g.
+  `myapp-linux-amd64.tar.gz`), where the smart default would otherwise create a directory named
+  after that full filename. Pass `--output-dir myapp` to land the contents in a short, predictable
+  directory name instead of one that repeats the platform suffix.
+
+By default, existing files are never overwritten. Each preserved file is reported as
+`Skipping existing file: NAME`, and extraction continues. Pass `--overwrite` to replace existing
+files and directories at the destination instead of skipping them.
 
 ## Legacy Chinese filenames
 
@@ -85,14 +123,34 @@ Legacy Chinese filename decoding with the default destination:
 unpack --cn old-photos.zip
 ```
 
-An explicit output directory:
+An explicit output directory, collecting loose top-level items instead of scattering them into the
+current directory:
 
 ```sh
 unpack --output-dir restored photos.zip documents.tar.gz
+```
+
+A release package whose filename encodes OS/arch, extracted into a short, predictable directory
+name instead of one that repeats the platform suffix:
+
+```sh
+unpack --output-dir myapp myapp-linux-amd64.tar.gz
 ```
 
 Both flags together:
 
 ```sh
 unpack --cn --output-dir restored old-photos.zip
+```
+
+Re-extract into a directory that already has files, replacing them:
+
+```sh
+unpack --output-dir restored --overwrite photos.zip
+```
+
+Print version information:
+
+```sh
+unpack --version
 ```
