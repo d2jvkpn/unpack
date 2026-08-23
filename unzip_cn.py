@@ -16,18 +16,25 @@ def decode_name(name):
         return name
 
 
-def single_directory_prefix(members):
-    names = [decode_name(member.filename).replace('\\', '/') for member in members]
-    names = [name.lstrip('/') for name in names if name.rstrip('/')]
-    top_level_names = {name.split('/', 1)[0] for name in names}
+def decoded_member_names(members):
+    decoded = []
+    for member in members:
+        name = decode_name(member.filename).replace('\\', '/').lstrip('/')
+        if name.rstrip('/'):
+            decoded.append((member, name))
+    return decoded
+
+
+def single_directory_prefix(decoded_members):
+    top_level_names = {name.split('/', 1)[0] for _, name in decoded_members}
     if len(top_level_names) != 1:
         return None
 
     top_level_name = next(iter(top_level_names))
-    is_directory = any('/' in name.rstrip('/') for name in names)
+    is_directory = any('/' in name.rstrip('/') for _, name in decoded_members)
     is_directory = is_directory or any(
         name.rstrip('/') == top_level_name and member.is_dir()
-        for name, member in zip(names, members)
+        for member, name in decoded_members
     )
     return top_level_name if is_directory else None
 
@@ -49,8 +56,23 @@ def unzip(path, secret=None, output_dir=None):
             archive.setpassword(secret)
 
         members = archive.infolist()
-        prefix = single_directory_prefix(members) if output_dir else None
-        base_directory = output_dir or os.curdir
+        decoded_members = decoded_member_names(members)
+        prefix = single_directory_prefix(decoded_members) if output_dir else None
+        if output_dir:
+            base_directory = output_dir
+        else:
+            top_level_names = {
+                name.split('/', 1)[0] for _, name in decoded_members
+            }
+            if len(top_level_names) > 1:
+                archive_stem = os.path.splitext(os.path.basename(path))[0]
+                try:
+                    base_directory = safe_destination(os.curdir, archive_stem)
+                except ValueError as err:
+                    print("Failed to extract archive: {}".format(err))
+                    return
+            else:
+                base_directory = os.curdir
         os.makedirs(base_directory, exist_ok=True)
 
         for member in members:

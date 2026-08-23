@@ -103,6 +103,48 @@ class UnzipCnCliTests(unittest.TestCase):
                 (working_directory / "wrapper/file.txt").read_text(), "content"
             )
 
+    def test_default_mode_uses_archive_named_directory_for_multiple_items(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            working_directory = Path(temporary_directory)
+            archive_path = working_directory / "bundle.zip"
+            self.make_zip(
+                archive_path,
+                {"first.txt": "first", "folder/second.txt": "second"},
+            )
+
+            result = self.run_script(working_directory, archive_path)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue((working_directory / "bundle/first.txt").exists())
+            self.assertEqual(
+                (working_directory / "bundle/first.txt").read_text(), "first"
+            )
+            self.assertEqual(
+                (working_directory / "bundle/folder/second.txt").read_text(),
+                "second",
+            )
+            self.assertFalse((working_directory / "first.txt").exists())
+
+    def test_default_archive_named_directory_cannot_be_external_symlink(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_root = Path(temporary_directory)
+            working_directory = temporary_root / "working"
+            archive_path = working_directory / "bundle.zip"
+            outside_directory = temporary_root / "outside"
+            working_directory.mkdir()
+            outside_directory.mkdir()
+            os.symlink(outside_directory, working_directory / "bundle")
+            self.make_zip(
+                archive_path,
+                {"first.txt": "first", "second.txt": "second"},
+            )
+
+            result = self.run_script(working_directory, archive_path)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse((outside_directory / "first.txt").exists())
+            self.assertFalse((outside_directory / "second.txt").exists())
+
     def test_archive_members_cannot_escape_output_dir(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             working_directory = Path(temporary_directory)
