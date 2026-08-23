@@ -20,7 +20,7 @@ func TestRunShowsHelpAndParsesSupportedFlags(t *testing.T) {
 			t.Fatalf("run(--help) status = %d, stderr = %q", status, stderr.String())
 		}
 		for _, text := range []string{
-			"unpack [--cn] [--output-dir DIR] ARCHIVE...",
+			"unpack [--cn] [--output-dir DIR] [--overwrite] [--version] ARCHIVE...",
 			"--cn",
 			"--output-dir DIR",
 		} {
@@ -59,7 +59,7 @@ func TestRunRequiresAtLeastOneArchive(t *testing.T) {
 	if status != 2 {
 		t.Fatalf("run() status = %d, want 2", status)
 	}
-	if !strings.Contains(stderr.String(), "Usage: unpack [--cn] [--output-dir DIR] ARCHIVE...") {
+	if !strings.Contains(stderr.String(), "Usage: unpack [--cn] [--output-dir DIR] [--overwrite] [--version] ARCHIVE...") {
 		t.Fatalf("stderr = %q, want usage", stderr.String())
 	}
 }

@@ -42,7 +42,7 @@ func scanZIP(path string, chinese bool) (entries []archiveEntry, err error) {
 	return entries, nil
 }
 
-func extractZIP(path string, plans []plannedEntry) (skippedEntries []string, err error) {
+func extractZIP(path string, plans []plannedEntry, overwrite bool) (skippedEntries []string, err error) {
 	var (
 		reader      *zip.ReadCloser
 		directories *directoryFinalizer
@@ -66,7 +66,7 @@ func extractZIP(path string, plans []plannedEntry) (skippedEntries []string, err
 	}
 
 	skippedEntries = make([]string, 0)
-	directories = newDirectoryFinalizer()
+	directories = newDirectoryFinalizer(overwrite)
 	for _, plan := range plans {
 		file := reader.File[plan.Entry.SourceIndex]
 		switch plan.Entry.Kind {
@@ -79,7 +79,7 @@ func extractZIP(path string, plans []plannedEntry) (skippedEntries []string, err
 			if err := directories.ensure(filepath.Dir(plan.Destination)); err != nil {
 				return skippedEntries, fmt.Errorf("create parent directories for ZIP entry %q: %w", plan.Entry.Name, err)
 			}
-			skipped, err := writeNewFile(plan.Destination, plan.Entry.Mode, func(writer io.Writer) error {
+			skipped, err := writeNewFile(plan.Destination, plan.Entry.Mode, overwrite, func(writer io.Writer) error {
 				var (
 					entryReader io.ReadCloser
 					copyErr     error

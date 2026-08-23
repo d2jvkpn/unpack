@@ -137,7 +137,7 @@ func TestDirectoryFinalizerUsesDefaultModeForImplicitDirectories(t *testing.T) {
 	root := t.TempDir()
 	parent := filepath.Join(root, "implicit")
 	child := filepath.Join(parent, "nested")
-	directories := newDirectoryFinalizer()
+	directories := newDirectoryFinalizer(false)
 	if err := directories.ensure(child); err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func TestWriteNewFileSkipsExistingFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	skipped, err := writeNewFile(destination, 0o644, func(io.Writer) error {
+	skipped, err := writeNewFile(destination, 0o644, false, func(io.Writer) error {
 		return errors.New("write should not run")
 	})
 	if err != nil || !skipped {
@@ -178,7 +178,7 @@ func TestWriteNewFileSkipsFinalSymlink(t *testing.T) {
 		t.Skipf("cannot create symlink: %v", err)
 	}
 
-	skipped, err := writeNewFile(destination, 0o644, func(io.Writer) error {
+	skipped, err := writeNewFile(destination, 0o644, false, func(io.Writer) error {
 		return errors.New("write should not run")
 	})
 	if err != nil || !skipped {
@@ -193,7 +193,7 @@ func TestWriteNewFileSkipsFinalSymlink(t *testing.T) {
 func TestWriteNewFileRemovesPartialFileAfterWriteFailure(t *testing.T) {
 	destination := filepath.Join(t.TempDir(), "partial.txt")
 
-	skipped, err := writeNewFile(destination, 0o640, func(w io.Writer) error {
+	skipped, err := writeNewFile(destination, 0o640, false, func(w io.Writer) error {
 		if _, writeErr := io.WriteString(w, "partial"); writeErr != nil {
 			return writeErr
 		}

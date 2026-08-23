@@ -103,7 +103,12 @@ func scanTAR(path string, format archiveFormat, chinese bool) (entries []archive
 	}
 }
 
-func extractTAR(path string, format archiveFormat, plans []plannedEntry) (skippedEntries []string, err error) {
+func extractTAR(
+	path string,
+	format archiveFormat,
+	plans []plannedEntry,
+	overwrite bool,
+) (skippedEntries []string, err error) {
 	var (
 		reader       *tar.Reader
 		closeArchive func() error
@@ -130,7 +135,7 @@ func extractTAR(path string, format archiveFormat, plans []plannedEntry) (skippe
 		}
 	}
 
-	directories = newDirectoryFinalizer()
+	directories = newDirectoryFinalizer(overwrite)
 	for index := 0; ; index++ {
 		_, nextErr := reader.Next()
 		if errors.Is(nextErr, io.EOF) {
@@ -165,7 +170,7 @@ func extractTAR(path string, format archiveFormat, plans []plannedEntry) (skippe
 			if mkdirErr := directories.ensure(filepath.Dir(plan.Destination)); mkdirErr != nil {
 				return skippedEntries, fmt.Errorf("create parent directories for TAR entry %q: %w", plan.Entry.Name, mkdirErr)
 			}
-			skipped, writeErr := writeNewFile(plan.Destination, plan.Entry.Mode, func(writer io.Writer) error {
+			skipped, writeErr := writeNewFile(plan.Destination, plan.Entry.Mode, overwrite, func(writer io.Writer) error {
 				var copyErr error
 
 				_, copyErr = io.Copy(writer, reader)

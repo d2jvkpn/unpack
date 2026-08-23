@@ -281,12 +281,14 @@ func requireStrictlyWithin(base string, destination string) error {
 type directoryFinalizer struct {
 	created    map[string]struct{}
 	finalModes map[string]fs.FileMode
+	overwrite  bool
 }
 
-func newDirectoryFinalizer() *directoryFinalizer {
+func newDirectoryFinalizer(overwrite bool) *directoryFinalizer {
 	return &directoryFinalizer{
 		created:    make(map[string]struct{}),
 		finalModes: make(map[string]fs.FileMode),
+		overwrite:  overwrite,
 	}
 }
 
@@ -303,7 +305,15 @@ func (d *directoryFinalizer) ensure(name string) error {
 		info, err := os.Stat(current)
 		if err == nil {
 			if !info.IsDir() {
-				return fmt.Errorf("path %q is not a directory", current)
+				if !d.overwrite {
+					return fmt.Errorf("path %q is not a directory", current)
+				}
+				if err := os.Remove(current); err != nil {
+					return fmt.Errorf("remove existing file %q: %w", current, err)
+				}
+				missing = append(missing, current)
+				current = filepath.Dir(current)
+				continue
 			}
 			break
 		}
@@ -376,10 +386,12 @@ func (d *directoryFinalizer) finalize() error {
 func writeNewFile(
 	destination string,
 	mode fs.FileMode,
+	overwrite bool,
 	write func(io.Writer) error,
 ) (skipped bool, err error) {
 	var (
 		permissions fs.FileMode
+		flags       int
 		file        *os.File
 	)
 
@@ -390,8 +402,17 @@ func writeNewFile(
 	if permissions == 0 {
 		permissions = 0o644
 	}
-	file, err = os.OpenFile(destination, os.O_WRONLY|os.O_CREATE|os.O_EXCL, permissions)
-	if errors.Is(err, fs.ErrExist) {
+	flags = os.O_WRONLY | os.O_CREATE | os.O_EXCL
+	if overwrite {
+		flags = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+		if info, statErr := os.Lstat(destination); statErr == nil && info.IsDir() {
+			if removeErr := os.RemoveAll(destination); removeErr != nil {
+				return false, fmt.Errorf("remove existing directory %q: %w", destination, removeErr)
+			}
+		}
+	}
+	file, err = os.OpenFile(destination, flags, permissions)
+	if !overwrite && errors.Is(err, fs.ErrExist) {
 		return true, nil
 	}
 	if err != nil {

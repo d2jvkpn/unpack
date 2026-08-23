@@ -1,7 +1,5 @@
 # Repository Guidelines
 
-@./.agents/me/Docs.md
-
 ## Project Structure & Module Organization
 
 This repository contains a small Go command-line application for safely extracting ZIP, TAR,
@@ -36,7 +34,8 @@ and preserve the scan-before-write safety model. Name tests descriptively with t
 Use Go's `testing` package and temporary directories or synthetic archives to keep tests isolated.
 Add regression tests for parsing, filename decoding, destination planning, archive validation, and
 extraction failures. Safety-sensitive changes must verify that invalid archives are rejected before
-payload files are written and that existing files are never overwritten.
+payload files are written and that existing files are only overwritten when `--overwrite` is
+passed.
 
 ## Commit & Pull Request Guidelines
 

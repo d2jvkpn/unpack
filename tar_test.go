@@ -144,7 +144,7 @@ func TestExtractTARWritesPlannedEntriesAcrossFormats(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			skipped, err := extractTAR(path, tt.format, plans)
+			skipped, err := extractTAR(path, tt.format, plans, false)
 			if err != nil || len(skipped) != 0 {
 				t.Fatalf("extractTAR() = %#v, %v", skipped, err)
 			}
@@ -181,7 +181,7 @@ func TestExtractTARSkipsExistingFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	skipped, err := extractTAR(path, formatTAR, plans)
+	skipped, err := extractTAR(path, formatTAR, plans, false)
 	if err != nil || len(skipped) != 1 || skipped[0] != "note.txt" {
 		t.Fatalf("extractTAR() = %#v, %v", skipped, err)
 	}
@@ -204,7 +204,7 @@ func TestExtractTARUsesPlannedSourceIndex(t *testing.T) {
 		RelativeName: "selected.txt",
 		Destination:  filepath.Join(root, "out", "selected.txt"),
 	}}
-	if _, err := extractTAR(path, formatTAR, plans); err != nil {
+	if _, err := extractTAR(path, formatTAR, plans, false); err != nil {
 		t.Fatal(err)
 	}
 	contents, err := os.ReadFile(plans[0].Destination)
@@ -226,7 +226,7 @@ func TestExtractTARErrorsForMissingPlannedSourceIndex(t *testing.T) {
 		RelativeName: "missing.txt",
 		Destination:  filepath.Join(root, "out", "missing.txt"),
 	}}
-	if _, err := extractTAR(path, formatTAR, plans); err == nil {
+	if _, err := extractTAR(path, formatTAR, plans, false); err == nil {
 		t.Fatal("extractTAR() accepted a missing planned source index")
 	}
 }
@@ -290,7 +290,7 @@ func TestExtractTARDefersRestrictiveDirectoryModes(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if _, err := extractTAR(archivePath, formatTAR, plans); err != nil {
+			if _, err := extractTAR(archivePath, formatTAR, plans, false); err != nil {
 				t.Fatal(err)
 			}
 			tt.check(t, root)
@@ -318,7 +318,7 @@ func TestExtractTARDoesNotChmodPreExistingDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := extractTAR(archivePath, formatTAR, plans); err != nil {
+	if _, err := extractTAR(archivePath, formatTAR, plans, false); err != nil {
 		t.Fatal(err)
 	}
 	assertDirectoryMode(t, docs, 0o750)

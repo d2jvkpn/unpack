@@ -130,7 +130,7 @@ func TestExtractZIPWritesPlannedFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	skipped, err := extractZIP(path, plans)
+	skipped, err := extractZIP(path, plans, false)
 	if err != nil || len(skipped) != 0 {
 		t.Fatalf("extractZIP() = %#v, %v", skipped, err)
 	}
@@ -166,7 +166,7 @@ func TestExtractZIPSkipsExistingFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	skipped, err := extractZIP(path, plans)
+	skipped, err := extractZIP(path, plans, false)
 	if err != nil || len(skipped) != 1 || skipped[0] != "note.txt" {
 		t.Fatalf("extractZIP() = %#v, %v", skipped, err)
 	}
@@ -235,7 +235,7 @@ func TestExtractZIPDefersRestrictiveDirectoryModes(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if _, err := extractZIP(archivePath, plans); err != nil {
+			if _, err := extractZIP(archivePath, plans, false); err != nil {
 				t.Fatal(err)
 			}
 			tt.check(t, root)
@@ -263,7 +263,7 @@ func TestExtractZIPDoesNotChmodPreExistingDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := extractZIP(archivePath, plans); err != nil {
+	if _, err := extractZIP(archivePath, plans, false); err != nil {
 		t.Fatal(err)
 	}
 	assertDirectoryMode(t, docs, 0o750)

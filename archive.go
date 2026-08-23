@@ -86,6 +86,7 @@ func extractArchive(
 	path string,
 	format archiveFormat,
 	plans []plannedEntry,
+	overwrite bool,
 ) ([]string, error) {
 	var (
 		skipped []string
@@ -93,9 +94,9 @@ func extractArchive(
 	)
 	switch format {
 	case formatZIP:
-		skipped, err = extractZIP(path, plans)
+		skipped, err = extractZIP(path, plans, overwrite)
 	case formatTAR, formatTarGzip:
-		skipped, err = extractTAR(path, format, plans)
+		skipped, err = extractTAR(path, format, plans, overwrite)
 	default:
 		err = fmt.Errorf("unsupported archive format %d", format)
 	}
