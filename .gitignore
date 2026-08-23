@@ -1,0 +1,29 @@
+# path: .gitignore
+
+#### files
+.*
+!.gitignore
+.env*
+*.log
+.DS_Store
+nohup.out
+docker-compose.yaml
+docker-compose.yml
+compose.yaml
+compose.yml
+*.dev.json
+
+#### directories
+configs/
+data/
+logs/
+target/
+
+####
+bin/
+vendor/
+__pycache__/
+
+dist/
+build/
+node_modules/
