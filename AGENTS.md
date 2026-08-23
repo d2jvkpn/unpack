@@ -47,4 +47,4 @@ user-visible behavior, call out security or compatibility implications, link rel
 list verification commands. Update `README.md` when CLI flags, supported formats, output rules, or
 requirements change.
 
-@.agents/me/README.md
+@./.agents/me/README.md
