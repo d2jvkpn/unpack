@@ -59,18 +59,23 @@ Output directory: /home/user/photos
 
 ## Version information
 
-`unpack --version` prints the version, commit, and build time, and exits without extracting
-anything:
+`unpack --version` prints the version, commit, commit time, dirty flag, and build time, and exits
+without extracting anything:
 
 ```text
-version:    0.1.0
-commit:     a0fbda3
-build_time: 2026-08-23T09:36:37Z
+version:     0.3.0
+commit:      189da1ea953c4cd8381b044057fc7a2f32811113
+commit_time: 2026-08-23T14:30:23Z
+modified:    false
+build_time:  2026-08-23T14:40:49Z
 ```
 
-`commit` and `build_time` are only populated when the binary is built with `make build` (or one of
-the other `make build-*` targets), which injects them via `-ldflags`. A `go build` invocation
-without those ldflags reports `commit: none` and `build_time: unknown`.
+`commit`, `commit_time`, and `modified` come from the VCS metadata that `go build` embeds
+automatically when built inside a git checkout (no `-ldflags` needed); they report `none`,
+`unknown`, and `false` respectively when that metadata isn't available. `build_time` is only
+populated when the binary is built with `make build` (or one of the other `make build-*` targets),
+which injects it via `-ldflags`. A plain `go build` invocation without that ldflag reports
+`build_time: unknown`.
 
 ## Output rules
 
