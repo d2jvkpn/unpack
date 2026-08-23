@@ -16,13 +16,24 @@ go build -o unpack .
 
 ## Installation
 
-Install from a source checkout into your configured Go binary directory:
+Download and install a prebuilt binary for Linux (amd64/arm64) or macOS (arm64):
+
+```sh
+curl -fsSL https://github.com/d2jvkpn/unpack/releases/latest/download/install.sh | sh
+```
+
+The script downloads the matching platform `.zip` release asset, so `unzip` must be available. It
+installs into `/usr/local/bin` by default, falling back to `$HOME/.local/bin` if that is not
+writable. Set `INSTALL_DIR` to choose a different location, or `VERSION` to install a specific
+release tag instead of the latest one.
+
+Alternatively, install from a source checkout into your configured Go binary directory:
 
 ```sh
 go install .
 ```
 
-Alternatively, copy the binary produced by the build command to a directory on your `PATH`.
+You can also copy the binary produced by the build command to a directory on your `PATH`.
 
 ## Usage
 

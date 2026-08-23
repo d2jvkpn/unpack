@@ -1,4 +1,4 @@
-package main
+package unpack
 
 import (
 	"archive/tar"
@@ -14,10 +14,10 @@ import (
 func TestRunShowsHelpAndParsesSupportedFlags(t *testing.T) {
 	t.Run("help", func(t *testing.T) {
 		var stdout, stderr bytes.Buffer
-		status := run([]string{"--help"}, &stdout, &stderr, t.TempDir())
+		status := Run([]string{"--help"}, &stdout, &stderr, t.TempDir())
 
 		if status != 0 {
-			t.Fatalf("run(--help) status = %d, stderr = %q", status, stderr.String())
+			t.Fatalf("Run(--help) status = %d, stderr = %q", status, stderr.String())
 		}
 		for _, text := range []string{
 			"unpack [--cn] [--output-dir DIR] [--overwrite] [--version] ARCHIVE...",
@@ -38,7 +38,7 @@ func TestRunShowsHelpAndParsesSupportedFlags(t *testing.T) {
 		outputDir := filepath.Join(root, "output")
 		var stdout, stderr bytes.Buffer
 
-		status := run(
+		status := Run(
 			[]string{"--cn", "--output-dir", outputDir, archivePath},
 			&stdout,
 			&stderr,
@@ -46,7 +46,7 @@ func TestRunShowsHelpAndParsesSupportedFlags(t *testing.T) {
 		)
 
 		if status != 0 {
-			t.Fatalf("run() status = %d, stderr = %q", status, stderr.String())
+			t.Fatalf("Run() status = %d, stderr = %q", status, stderr.String())
 		}
 		assertFileContents(t, filepath.Join(outputDir, "中文.txt"), "decoded")
 	})
@@ -54,10 +54,10 @@ func TestRunShowsHelpAndParsesSupportedFlags(t *testing.T) {
 
 func TestRunRequiresAtLeastOneArchive(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	status := run(nil, &stdout, &stderr, t.TempDir())
+	status := Run(nil, &stdout, &stderr, t.TempDir())
 
 	if status != 2 {
-		t.Fatalf("run() status = %d, want 2", status)
+		t.Fatalf("Run() status = %d, want 2", status)
 	}
 	if !strings.Contains(stderr.String(), "Usage: unpack [--cn] [--output-dir DIR] [--overwrite] [--version] ARCHIVE...") {
 		t.Fatalf("stderr = %q, want usage", stderr.String())
@@ -78,10 +78,10 @@ func TestRunUsesSmartDefaultDestinations(t *testing.T) {
 		}
 		var stdout, stderr bytes.Buffer
 
-		status := run([]string{archivePath}, &stdout, &stderr, workingDir)
+		status := Run([]string{archivePath}, &stdout, &stderr, workingDir)
 
 		if status != 0 {
-			t.Fatalf("run() status = %d, stderr = %q", status, stderr.String())
+			t.Fatalf("Run() status = %d, stderr = %q", status, stderr.String())
 		}
 		assertFileContents(t, filepath.Join(workingDir, "note.txt"), "single")
 		assertPathDoesNotExist(t, filepath.Join(workingDir, "single"))
@@ -103,10 +103,10 @@ func TestRunUsesSmartDefaultDestinations(t *testing.T) {
 		}
 		var stdout, stderr bytes.Buffer
 
-		status := run([]string{archivePath}, &stdout, &stderr, workingDir)
+		status := Run([]string{archivePath}, &stdout, &stderr, workingDir)
 
 		if status != 0 {
-			t.Fatalf("run() status = %d, stderr = %q", status, stderr.String())
+			t.Fatalf("Run() status = %d, stderr = %q", status, stderr.String())
 		}
 		assertFileContents(t, filepath.Join(workingDir, "bundle", "first.txt"), "first")
 		assertFileContents(t, filepath.Join(workingDir, "bundle", "docs", "second.txt"), "second")
@@ -128,10 +128,10 @@ func TestRunUsesSmartDefaultDestinations(t *testing.T) {
 		}
 		var stdout, stderr bytes.Buffer
 
-		status := run([]string{archivePath}, &stdout, &stderr, workingDir)
+		status := Run([]string{archivePath}, &stdout, &stderr, workingDir)
 
 		if status != 0 {
-			t.Fatalf("run() status = %d, stderr = %q", status, stderr.String())
+			t.Fatalf("Run() status = %d, stderr = %q", status, stderr.String())
 		}
 		assertFileContents(t, filepath.Join(workingDir, "bundle", "first.txt"), "first")
 		assertFileContents(t, filepath.Join(workingDir, "bundle", "docs", "second.txt"), "second")
@@ -181,10 +181,10 @@ func TestRunRejectsUnsafeSyntheticDefaultBases(t *testing.T) {
 			}
 			var stdout, stderr bytes.Buffer
 
-			status := run([]string{archivePath}, &stdout, &stderr, workingDir)
+			status := Run([]string{archivePath}, &stdout, &stderr, workingDir)
 
 			if status != 1 {
-				t.Fatalf("run() status = %d, want 1; stderr = %q", status, stderr.String())
+				t.Fatalf("Run() status = %d, want 1; stderr = %q", status, stderr.String())
 			}
 			assertPathDoesNotExist(t, tt.payloadPath(root, workingDir))
 		})
@@ -214,10 +214,10 @@ func TestRunRejectsSyntheticDefaultBaseSymlinkEscape(t *testing.T) {
 	}
 	var stdout, stderr bytes.Buffer
 
-	status := run([]string{archivePath}, &stdout, &stderr, workingDir)
+	status := Run([]string{archivePath}, &stdout, &stderr, workingDir)
 
 	if status != 1 {
-		t.Fatalf("run() status = %d, want 1; stderr = %q", status, stderr.String())
+		t.Fatalf("Run() status = %d, want 1; stderr = %q", status, stderr.String())
 	}
 	assertPathDoesNotExist(t, filepath.Join(outsideDir, "first.txt"))
 	assertPathDoesNotExist(t, filepath.Join(outsideDir, "docs", "second.txt"))
@@ -261,10 +261,10 @@ func TestRunAcceptsRootDirectoryMarkers(t *testing.T) {
 			outputDir := filepath.Join(root, "output")
 			var stdout, stderr bytes.Buffer
 
-			status := run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
+			status := Run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
 
 			if status != 0 {
-				t.Fatalf("run() status = %d, stderr = %q", status, stderr.String())
+				t.Fatalf("Run() status = %d, stderr = %q", status, stderr.String())
 			}
 			assertFileContents(t, filepath.Join(outputDir, tt.payloadName), strings.TrimSuffix(tt.payloadName, ".txt"))
 		})
@@ -281,10 +281,10 @@ func TestRunExplicitOutputStripsSoleTopLevelDirectory(t *testing.T) {
 	outputDir := filepath.Join(root, "output")
 	var stdout, stderr bytes.Buffer
 
-	status := run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
+	status := Run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
 
 	if status != 0 {
-		t.Fatalf("run() status = %d, stderr = %q", status, stderr.String())
+		t.Fatalf("Run() status = %d, stderr = %q", status, stderr.String())
 	}
 	assertFileContents(t, filepath.Join(outputDir, "note.txt"), "unwrapped")
 	assertPathDoesNotExist(t, filepath.Join(outputDir, "wrapper"))
@@ -296,10 +296,10 @@ func TestRunRejectsShortOutputAlias(t *testing.T) {
 	writeZIPFixture(t, archivePath, []zipFixture{{Name: "note.txt", Body: "content"}})
 	var stdout, stderr bytes.Buffer
 
-	status := run([]string{"-o", filepath.Join(root, "output"), archivePath}, &stdout, &stderr, root)
+	status := Run([]string{"-o", filepath.Join(root, "output"), archivePath}, &stdout, &stderr, root)
 
 	if status != 2 {
-		t.Fatalf("run(-o) status = %d, want 2", status)
+		t.Fatalf("Run(-o) status = %d, want 2", status)
 	}
 	if !strings.Contains(stderr.String(), "flag provided but not defined: -o") {
 		t.Fatalf("stderr = %q, want rejected -o flag", stderr.String())
@@ -342,10 +342,10 @@ func TestRunRejectsSingleDashLongOptionsWithoutWriting(t *testing.T) {
 			writeZIPFixture(t, archivePath, []zipFixture{{Name: "note.txt", Body: "content"}})
 			var stdout, stderr bytes.Buffer
 
-			status := run(tt.args(root, archivePath), &stdout, &stderr, root)
+			status := Run(tt.args(root, archivePath), &stdout, &stderr, root)
 
 			if status != 2 {
-				t.Errorf("run() status = %d, want 2; stderr = %q", status, stderr.String())
+				t.Errorf("Run() status = %d, want 2; stderr = %q", status, stderr.String())
 			}
 			assertPathDoesNotExist(t, tt.writtenPath(root))
 		})
@@ -365,7 +365,7 @@ func TestRunAcceptsDashPrefixedOutputDirectoryOperand(t *testing.T) {
 	}
 	var stdout, stderr bytes.Buffer
 
-	status := run(
+	status := Run(
 		[]string{"--output-dir", "-destination", archivePath},
 		&stdout,
 		&stderr,
@@ -373,7 +373,7 @@ func TestRunAcceptsDashPrefixedOutputDirectoryOperand(t *testing.T) {
 	)
 
 	if status != 0 {
-		t.Fatalf("run() status = %d, stderr = %q", status, stderr.String())
+		t.Fatalf("Run() status = %d, stderr = %q", status, stderr.String())
 	}
 	assertFileContents(t, filepath.Join(workingDir, "-destination", "note.txt"), "content")
 }
@@ -391,10 +391,10 @@ func TestRunStopsOptionParsingAtFirstArchive(t *testing.T) {
 	}
 	var stdout, stderr bytes.Buffer
 
-	status := run([]string{archivePath, "-cn"}, &stdout, &stderr, workingDir)
+	status := Run([]string{archivePath, "-cn"}, &stdout, &stderr, workingDir)
 
 	if status != 1 {
-		t.Fatalf("run() status = %d, want processing status 1; stderr = %q", status, stderr.String())
+		t.Fatalf("Run() status = %d, want processing status 1; stderr = %q", status, stderr.String())
 	}
 	assertFileContents(t, filepath.Join(workingDir, "note.txt"), "content")
 	if !strings.Contains(stderr.String(), "-cn") {
@@ -413,7 +413,7 @@ func TestRunProcessesMultipleArchiveFormats(t *testing.T) {
 	outputDir := filepath.Join(root, "output")
 	var stdout, stderr bytes.Buffer
 
-	status := run(
+	status := Run(
 		[]string{"--output-dir", outputDir, zipPath, tgzPath},
 		&stdout,
 		&stderr,
@@ -421,7 +421,7 @@ func TestRunProcessesMultipleArchiveFormats(t *testing.T) {
 	)
 
 	if status != 0 {
-		t.Fatalf("run() status = %d, stderr = %q", status, stderr.String())
+		t.Fatalf("Run() status = %d, stderr = %q", status, stderr.String())
 	}
 	assertFileContents(t, filepath.Join(outputDir, "zip.txt"), "zip")
 	assertFileContents(t, filepath.Join(outputDir, "tgz.txt"), "tgz")
@@ -435,7 +435,7 @@ func TestRunContinuesAfterArchiveFailure(t *testing.T) {
 	outputDir := filepath.Join(root, "output")
 	var stdout, stderr bytes.Buffer
 
-	status := run(
+	status := Run(
 		[]string{"--output-dir", outputDir, missingPath, validPath},
 		&stdout,
 		&stderr,
@@ -443,7 +443,7 @@ func TestRunContinuesAfterArchiveFailure(t *testing.T) {
 	)
 
 	if status != 1 {
-		t.Fatalf("run() status = %d, want 1; stderr = %q", status, stderr.String())
+		t.Fatalf("Run() status = %d, want 1; stderr = %q", status, stderr.String())
 	}
 	if !strings.Contains(stderr.String(), missingPath) {
 		t.Fatalf("stderr = %q, want missing archive path %q", stderr.String(), missingPath)
@@ -462,10 +462,10 @@ func TestRunRejectsUnsafeArchivesBeforeWritingPayloads(t *testing.T) {
 		outputDir := filepath.Join(root, "output")
 		var stdout, stderr bytes.Buffer
 
-		status := run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
+		status := Run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
 
 		if status != 1 {
-			t.Fatalf("run() status = %d, want 1; stderr = %q", status, stderr.String())
+			t.Fatalf("Run() status = %d, want 1; stderr = %q", status, stderr.String())
 		}
 		assertPathDoesNotExist(t, filepath.Join(outputDir, "safe.txt"))
 		assertPathDoesNotExist(t, filepath.Join(root, "escape.txt"))
@@ -491,10 +491,10 @@ func TestRunRejectsUnsafeArchivesBeforeWritingPayloads(t *testing.T) {
 		}
 		var stdout, stderr bytes.Buffer
 
-		status := run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
+		status := Run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
 
 		if status != 1 {
-			t.Fatalf("run() status = %d, want 1; stderr = %q", status, stderr.String())
+			t.Fatalf("Run() status = %d, want 1; stderr = %q", status, stderr.String())
 		}
 		assertPathDoesNotExist(t, filepath.Join(outputDir, "safe.txt"))
 		assertPathDoesNotExist(t, filepath.Join(outsideDir, "escape.txt"))
@@ -517,10 +517,10 @@ func TestRunRejectsUnsafeArchivesBeforeWritingPayloads(t *testing.T) {
 			outputDir := filepath.Join(root, "output")
 			var stdout, stderr bytes.Buffer
 
-			status := run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
+			status := Run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
 
 			if status != 1 {
-				t.Fatalf("run() status = %d, want 1; stderr = %q", status, stderr.String())
+				t.Fatalf("Run() status = %d, want 1; stderr = %q", status, stderr.String())
 			}
 			assertPathDoesNotExist(t, filepath.Join(outputDir, "safe.txt"))
 			assertPathDoesNotExist(t, filepath.Join(outputDir, "linked"))
@@ -535,10 +535,10 @@ func TestRunRejectsUnsafeArchivesBeforeWritingPayloads(t *testing.T) {
 		outputDir := filepath.Join(root, "output")
 		var stdout, stderr bytes.Buffer
 
-		status := run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
+		status := Run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
 
 		if status != 1 {
-			t.Fatalf("run() status = %d, want 1; stderr = %q", status, stderr.String())
+			t.Fatalf("Run() status = %d, want 1; stderr = %q", status, stderr.String())
 		}
 		assertPathDoesNotExist(t, filepath.Join(outputDir, "secret.txt"))
 	})
@@ -557,10 +557,10 @@ func TestRunReportsProgressAndPreservesExistingFiles(t *testing.T) {
 	}
 	var stdout, stderr bytes.Buffer
 
-	status := run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
+	status := Run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
 
 	if status != 0 {
-		t.Fatalf("run() status = %d, stderr = %q", status, stderr.String())
+		t.Fatalf("Run() status = %d, stderr = %q", status, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "Extracting: "+archivePath) {
 		t.Fatalf("stdout = %q, want extraction progress", stdout.String())
@@ -590,13 +590,13 @@ func TestRunReportsSkipsBeforeLaterExtractionFailure(t *testing.T) {
 	}}
 	var stderr bytes.Buffer
 
-	status := run([]string{"--output-dir", outputDir, archivePath}, stdout, &stderr, root)
+	status := Run([]string{"--output-dir", outputDir, archivePath}, stdout, &stderr, root)
 
 	if stdout.triggerErr != nil {
 		t.Fatal(stdout.triggerErr)
 	}
 	if status != 1 {
-		t.Fatalf("run() status = %d, want 1; stderr = %q", status, stderr.String())
+		t.Fatalf("Run() status = %d, want 1; stderr = %q", status, stderr.String())
 	}
 	assertFileContents(t, filepath.Join(outputDir, "first.txt"), "original")
 	if !strings.Contains(stdout.String(), "Skipping existing file: first.txt") {

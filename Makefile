@@ -7,13 +7,14 @@ BINARY := unpack
 
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 BUILD_TIME := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-LDFLAGS := -X main.commit=$(COMMIT) -X main.buildTime=$(BUILD_TIME)
+LDFLAGS := -X unpack/internal/unpack.commit=$(COMMIT) -X unpack/internal/unpack.buildTime=$(BUILD_TIME)
 
 .PHONY: build build-all \
 	build-linux build-darwin build-windows \
 	build-linux-amd64 build-linux-arm64 \
 	build-darwin-arm64 \
-	build-windows-amd64 build-windows-arm64
+	build-windows-amd64 build-windows-arm64 \
+	package
 
 BINARY_EXT :=
 ifeq ($(HOST_OS),windows)
@@ -51,3 +52,6 @@ build-darwin: build-darwin-arm64
 build-windows: build-windows-amd64 build-windows-arm64
 
 build-all: build-linux build-darwin build-windows
+
+package: build-all
+	./scripts/package.sh

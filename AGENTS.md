@@ -3,12 +3,13 @@
 ## Project Structure & Module Organization
 
 This repository contains a small Go command-line application for safely extracting ZIP, TAR,
-TAR.GZ, and TGZ archives. Command orchestration and argument parsing live in `main.go`; archive
-format detection is in `archive.go`; ZIP and TAR handling are separated into `zip.go` and `tar.go`;
-path validation and extraction planning live in `path.go`; and filename decoding helpers are in
-`names.go`. Tests are colocated with their implementation as `*_test.go`. `unzip_cn.py` and
-`test_unzip_cn.py` provide the legacy Python implementation and its tests. Design records are
-stored under `docs/records/superpowers/`.
+TAR.GZ, and TGZ archives. The root `main.go` is a thin entry point that only resolves the working
+directory and delegates to the `internal/unpack` package. Within `internal/unpack`, command
+orchestration and flag parsing live in `run.go`; archive format detection is in `archive.go`; ZIP
+and TAR handling are separated into `zip.go` and `tar.go`; path validation and extraction planning
+live in `path.go`; and filename decoding helpers are in `names.go`. Tests are colocated with their
+implementation as `*_test.go`. `unzip_cn.py` and `test_unzip_cn.py` provide the legacy Python
+implementation and its tests. Design records are stored under `docs/records/superpowers/`.
 
 ## Build, Test, and Development Commands
 
@@ -17,7 +18,7 @@ stored under `docs/records/superpowers/`.
 - `go test ./...` runs the complete Go test suite.
 - `go test -run TestRun ./...` runs a focused group of tests while iterating.
 - `python3 -m unittest test_unzip_cn.py` tests the Python compatibility utility.
-- `gofmt -w *.go` formats Go source and tests before review.
+- `gofmt -w .` formats Go source and tests before review.
 
 Go 1.27 or newer is required. Run the built binary with commands such as
 `./unpack --output-dir restored archive.tar.gz`.
