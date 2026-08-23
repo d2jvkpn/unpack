@@ -19,15 +19,15 @@ package_one() {
     stage="target/releases/$plat"
 
     mkdir -p "$stage"
-    cp "$src" "$stage/$entry"
+    mv "$src" "$stage/$entry"
     (cd "$stage" && zip -q "$ROOT_DIR/target/releases/$BINARY-$plat.zip" "$entry")
     rm -rf "$stage"
 }
 
 for plat in linux-amd64 linux-arm64 darwin-arm64; do
-    package_one "$plat" "target/$BINARY-$plat" "$BINARY"
+    package_one "$plat" "target/releases/$BINARY-$plat" "$BINARY"
 done
 
 for plat in windows-amd64 windows-arm64; do
-    package_one "$plat" "target/$BINARY-$plat.exe" "$BINARY.exe"
+    package_one "$plat" "target/releases/$BINARY-$plat.exe" "$BINARY.exe"
 done
