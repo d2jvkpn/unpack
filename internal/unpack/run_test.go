@@ -20,7 +20,7 @@ func TestRunShowsHelpAndParsesSupportedFlags(t *testing.T) {
 			t.Fatalf("Run(--help) status = %d, stderr = %q", status, stderr.String())
 		}
 		for _, text := range []string{
-			"unpack [--cn] [--output-dir DIR] [--overwrite] [--version] ARCHIVE...",
+			"unpack [--cn] [--output-dir DIR] [--overwrite] [--version] ARCHIVE [FILE...]",
 			"--cn",
 			"--output-dir DIR",
 		} {
@@ -59,7 +59,8 @@ func TestRunRequiresAtLeastOneArchive(t *testing.T) {
 	if status != 2 {
 		t.Fatalf("Run() status = %d, want 2", status)
 	}
-	if !strings.Contains(stderr.String(), "Usage: unpack [--cn] [--output-dir DIR] [--overwrite] [--version] ARCHIVE...") {
+	wantUsage := "Usage: unpack [--cn] [--output-dir DIR] [--overwrite] [--version] ARCHIVE [FILE...]"
+	if !strings.Contains(stderr.String(), wantUsage) {
 		t.Fatalf("stderr = %q, want usage", stderr.String())
 	}
 }
@@ -394,15 +395,16 @@ func TestRunStopsOptionParsingAtFirstArchive(t *testing.T) {
 	status := Run([]string{archivePath, "-cn"}, &stdout, &stderr, workingDir)
 
 	if status != 1 {
-		t.Fatalf("Run() status = %d, want processing status 1; stderr = %q", status, stderr.String())
+		t.Fatalf("Run() status = %d, want 1 (\"-cn\" is a literal, unmatched selector); stderr = %q",
+			status, stderr.String())
 	}
-	assertFileContents(t, filepath.Join(workingDir, "note.txt"), "content")
 	if !strings.Contains(stderr.String(), "-cn") {
-		t.Fatalf("stderr = %q, want positional archive error for -cn", stderr.String())
+		t.Fatalf("stderr = %q, want unmatched selector error mentioning -cn", stderr.String())
 	}
+	assertPathDoesNotExist(t, filepath.Join(workingDir, "note.txt"))
 }
 
-func TestRunProcessesMultipleArchiveFormats(t *testing.T) {
+func TestRunExtractsBothSupportedFormats(t *testing.T) {
 	root := t.TempDir()
 	zipPath := filepath.Join(root, "first.zip")
 	writeZIPFixture(t, zipPath, []zipFixture{{Name: "zip.txt", Body: "zip"}})
@@ -411,36 +413,31 @@ func TestRunProcessesMultipleArchiveFormats(t *testing.T) {
 		Name: "tgz.txt", Body: "tgz", Mode: 0o600, Typeflag: tar.TypeReg,
 	}})
 	outputDir := filepath.Join(root, "output")
-	var stdout, stderr bytes.Buffer
 
-	status := Run(
-		[]string{"--output-dir", outputDir, zipPath, tgzPath},
-		&stdout,
-		&stderr,
-		root,
-	)
-
-	if status != 0 {
-		t.Fatalf("Run() status = %d, stderr = %q", status, stderr.String())
+	for _, tt := range []struct {
+		archivePath string
+		fileName    string
+		body        string
+	}{
+		{zipPath, "zip.txt", "zip"},
+		{tgzPath, "tgz.txt", "tgz"},
+	} {
+		var stdout, stderr bytes.Buffer
+		status := Run([]string{"--output-dir", outputDir, tt.archivePath}, &stdout, &stderr, root)
+		if status != 0 {
+			t.Fatalf("Run() status = %d, stderr = %q", status, stderr.String())
+		}
+		assertFileContents(t, filepath.Join(outputDir, tt.fileName), tt.body)
 	}
-	assertFileContents(t, filepath.Join(outputDir, "zip.txt"), "zip")
-	assertFileContents(t, filepath.Join(outputDir, "tgz.txt"), "tgz")
 }
 
-func TestRunContinuesAfterArchiveFailure(t *testing.T) {
+func TestRunReportsErrorForMissingArchive(t *testing.T) {
 	root := t.TempDir()
 	missingPath := filepath.Join(root, "missing.zip")
-	validPath := filepath.Join(root, "valid.zip")
-	writeZIPFixture(t, validPath, []zipFixture{{Name: "valid.txt", Body: "valid"}})
 	outputDir := filepath.Join(root, "output")
 	var stdout, stderr bytes.Buffer
 
-	status := Run(
-		[]string{"--output-dir", outputDir, missingPath, validPath},
-		&stdout,
-		&stderr,
-		root,
-	)
+	status := Run([]string{"--output-dir", outputDir, missingPath}, &stdout, &stderr, root)
 
 	if status != 1 {
 		t.Fatalf("Run() status = %d, want 1; stderr = %q", status, stderr.String())
@@ -448,7 +445,86 @@ func TestRunContinuesAfterArchiveFailure(t *testing.T) {
 	if !strings.Contains(stderr.String(), missingPath) {
 		t.Fatalf("stderr = %q, want missing archive path %q", stderr.String(), missingPath)
 	}
-	assertFileContents(t, filepath.Join(outputDir, "valid.txt"), "valid")
+}
+
+func TestRunExtractsOnlySelectedFiles(t *testing.T) {
+	root := t.TempDir()
+	archivePath := filepath.Join(root, "bundle.zip")
+	writeZIPFixture(t, archivePath, []zipFixture{
+		{Name: "first.txt", Body: "first"},
+		{Name: "second.txt", Body: "second"},
+		{Name: "docs/third.txt", Body: "third"},
+	})
+	outputDir := filepath.Join(root, "output")
+	var stdout, stderr bytes.Buffer
+
+	status := Run([]string{"--output-dir", outputDir, archivePath, "first.txt", "docs"}, &stdout, &stderr, root)
+
+	if status != 0 {
+		t.Fatalf("Run() status = %d, stderr = %q", status, stderr.String())
+	}
+	assertFileContents(t, filepath.Join(outputDir, "first.txt"), "first")
+	assertFileContents(t, filepath.Join(outputDir, "docs", "third.txt"), "third")
+	assertPathDoesNotExist(t, filepath.Join(outputDir, "second.txt"))
+}
+
+func TestRunSelectorMatchesRelativeToSoleTopLevelDirectory(t *testing.T) {
+	root := t.TempDir()
+	archivePath := filepath.Join(root, "bundle.zip")
+	writeZIPFixture(t, archivePath, []zipFixture{
+		{Name: "wrapper/src/main.go", Body: "main"},
+		{Name: "wrapper/README.md", Body: "readme"},
+	})
+	workingDir := filepath.Join(root, "working")
+	if err := os.Mkdir(workingDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+
+	status := Run([]string{archivePath, "src/main.go"}, &stdout, &stderr, workingDir)
+
+	if status != 0 {
+		t.Fatalf("Run() status = %d, stderr = %q", status, stderr.String())
+	}
+	assertFileContents(t, filepath.Join(workingDir, "wrapper", "src", "main.go"), "main")
+	assertPathDoesNotExist(t, filepath.Join(workingDir, "wrapper", "README.md"))
+}
+
+func TestRunFailsWithoutWritingWhenSelectorMatchesNothing(t *testing.T) {
+	root := t.TempDir()
+	archivePath := filepath.Join(root, "bundle.zip")
+	writeZIPFixture(t, archivePath, []zipFixture{{Name: "first.txt", Body: "first"}})
+	outputDir := filepath.Join(root, "output")
+	var stdout, stderr bytes.Buffer
+
+	status := Run([]string{"--output-dir", outputDir, archivePath, "missing.txt"}, &stdout, &stderr, root)
+
+	if status != 1 {
+		t.Fatalf("Run() status = %d, want 1; stderr = %q", status, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "missing.txt") {
+		t.Fatalf("stderr = %q, want unmatched selector reported", stderr.String())
+	}
+	assertPathDoesNotExist(t, filepath.Join(outputDir, "first.txt"))
+}
+
+func TestRunTreatsTrailingArchivePathAsSelectorNotSecondArchive(t *testing.T) {
+	root := t.TempDir()
+	firstPath := filepath.Join(root, "first.zip")
+	writeZIPFixture(t, firstPath, []zipFixture{{Name: "first.txt", Body: "first"}})
+	secondPath := filepath.Join(root, "second.zip")
+	writeZIPFixture(t, secondPath, []zipFixture{{Name: "second.txt", Body: "second"}})
+	outputDir := filepath.Join(root, "output")
+	var stdout, stderr bytes.Buffer
+
+	status := Run([]string{"--output-dir", outputDir, firstPath, secondPath}, &stdout, &stderr, root)
+
+	if status != 1 {
+		t.Fatalf("Run() status = %d, want 1 (second.zip treated as a selector, not a second archive); stderr = %q",
+			status, stderr.String())
+	}
+	assertPathDoesNotExist(t, filepath.Join(outputDir, "first.txt"))
+	assertPathDoesNotExist(t, filepath.Join(outputDir, "second.txt"))
 }
 
 func TestRunRejectsUnsafeArchivesBeforeWritingPayloads(t *testing.T) {

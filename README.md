@@ -1,8 +1,8 @@
 # unpack
 
 Extract ZIP, TAR, TAR.GZ, and TGZ archives with safe paths, a smart default destination, an
-overridable output directory (`--output-dir`), optional overwrite of existing files, and optional
-legacy Chinese filename decoding.
+overridable output directory (`--output-dir`), optional extraction of specific files, optional
+overwrite of existing files, and optional legacy Chinese filename decoding.
 
 <https://github.com/d2jvkpn/unpack>
 
@@ -38,14 +38,14 @@ You can also copy the binary produced by the build command to a directory on you
 ## Usage
 
 ```text
-unpack [--cn] [--output-dir DIR] [--overwrite] [--version] ARCHIVE...
+unpack [--cn] [--output-dir DIR] [--overwrite] [--version] ARCHIVE [FILE...]
 ```
 
-One or more archive paths are required. Supported filename extensions are `.zip`, `.tar`,
-`.tar.gz`, and `.tgz`, matched case-insensitively. Multiple archives are processed in order; a
-failure in one archive does not prevent later archives from being processed. The final status is
-zero when all archives succeed, one when any archive fails processing, and two for invalid command
-usage.
+Exactly one archive path is required. Supported filename extensions are `.zip`, `.tar`, `.tar.gz`,
+and `.tgz`, matched case-insensitively. Any arguments after the archive are file selectors (see
+[Selecting specific files](#selecting-specific-files)); with none, the whole archive is extracted.
+The final status is zero on success, one when the archive fails to process (including a selector
+matching nothing), and two for invalid command usage.
 
 `--output-dir` has no short `-o` alias. `--overwrite` and `--version` have no short aliases either.
 
@@ -79,8 +79,8 @@ directory and retains that item's path. An archive containing multiple top-level
 into a directory named after the archive with its complete recognized suffix removed. For example,
 `a.tar.gz` extracts into `./a/`, not `./a.tar/`.
 
-With `--output-dir`, all archives in the invocation share the specified directory. When an archive
-contains one top-level directory, that wrapper directory is stripped: `wrapper/note.txt` becomes
+With `--output-dir`, the archive extracts into the specified directory. When an archive contains
+one top-level directory, that wrapper directory is stripped: `wrapper/note.txt` becomes
 `DIR/note.txt`. A sole top-level file is not stripped, and multiple top-level items retain their
 paths.
 
@@ -97,6 +97,33 @@ enough:
 By default, existing files are never overwritten. Each preserved file is reported as
 `Skipping existing file: NAME`, and extraction continues. Pass `--overwrite` to replace existing
 files and directories at the destination instead of skipping them.
+
+## Selecting specific files
+
+Arguments after `ARCHIVE` restrict extraction to entries matching those selectors instead of
+extracting everything. Each selector is one of:
+
+- An exact archive-relative path, e.g. `src/main.go`.
+- A directory prefix, e.g. `docs`, which also matches everything beneath it (`docs/a.txt`,
+  `docs/sub/b.txt`, ...).
+- A glob using `*`, `?`, and `[...]`. Unlike `path.Match`, `*` and `?` cross the `/` separator —
+  matching the default wildcard behavior of `unzip` and (with `--wildcards`) GNU `tar` — so `*.md`
+  matches `README.md` as well as `docs/sub/guide.md`.
+
+When an archive has exactly one top-level directory, selectors match paths relative to that
+directory rather than the raw archive path, so `unpack bundle.zip src/main.go` extracts
+`bundle-1.0/src/main.go` without needing to name the `bundle-1.0/` wrapper. Archives with multiple
+top-level entries match the raw archive path instead.
+
+If any selector matches nothing in the archive, `unpack` reports an error and extracts nothing
+(the same scan-before-write safety model applies: no payload is written until every selector is
+known to match).
+
+```sh
+unpack bundle.zip src/main.go docs '*.md'
+```
+
+Quote glob selectors so the shell does not expand them against your local filesystem first.
 
 ## Legacy Chinese filenames
 
@@ -138,7 +165,13 @@ An explicit output directory, collecting loose top-level items instead of scatte
 current directory:
 
 ```sh
-unpack --output-dir restored photos.zip documents.tar.gz
+unpack --output-dir restored photos.zip
+```
+
+Extract only specific files from an archive:
+
+```sh
+unpack --output-dir restored photos.zip vacation/beach.jpg vacation/sunset.jpg
 ```
 
 A release package whose filename encodes OS/arch, extracted into a short, predictable directory

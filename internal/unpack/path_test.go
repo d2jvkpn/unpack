@@ -41,6 +41,59 @@ func TestPlanEntriesSelectsDestination(t *testing.T) {
 	}
 }
 
+func TestPlanEntriesTracksTopLevelDirIndependentlyOfOnDiskStripping(t *testing.T) {
+	root := t.TempDir()
+	entries := []archiveEntry{
+		{Name: "myproj/src/main.go", Kind: entryFile},
+		{Name: "myproj/README.md", Kind: entryFile},
+	}
+
+	t.Run("no output dir: on-disk path keeps wrapper, match name does not", func(t *testing.T) {
+		plans, _, err := planEntries(entries, filepath.Join(root, "bundle.zip"), "", root, formatZIP)
+		if err != nil {
+			t.Fatalf("planEntries() error = %v", err)
+		}
+		if plans[0].ArchiveName != "myproj/src/main.go" || plans[0].TopLevelDir != "myproj" {
+			t.Fatalf("plans[0] = %#v", plans[0])
+		}
+		if plans[0].RelativeName != filepath.FromSlash("myproj/src/main.go") {
+			t.Fatalf("RelativeName = %q, want wrapper kept on disk", plans[0].RelativeName)
+		}
+	})
+
+	t.Run("explicit output dir: on-disk path strips wrapper, match name unaffected", func(t *testing.T) {
+		output := filepath.Join(root, "out")
+		plans, _, err := planEntries(entries, filepath.Join(root, "bundle.zip"), output, root, formatZIP)
+		if err != nil {
+			t.Fatalf("planEntries() error = %v", err)
+		}
+		if plans[0].ArchiveName != "myproj/src/main.go" || plans[0].TopLevelDir != "myproj" {
+			t.Fatalf("plans[0] = %#v", plans[0])
+		}
+		if plans[0].RelativeName != filepath.FromSlash("src/main.go") {
+			t.Fatalf("RelativeName = %q, want wrapper stripped on disk", plans[0].RelativeName)
+		}
+	})
+}
+
+func TestPlanEntriesLeavesTopLevelDirEmptyForMultipleTopLevelEntries(t *testing.T) {
+	root := t.TempDir()
+	entries := []archiveEntry{
+		{Name: "a.txt", Kind: entryFile},
+		{Name: "dir/b.txt", Kind: entryFile},
+	}
+
+	plans, _, err := planEntries(entries, filepath.Join(root, "bundle.zip"), "", root, formatZIP)
+	if err != nil {
+		t.Fatalf("planEntries() error = %v", err)
+	}
+	for _, plan := range plans {
+		if plan.TopLevelDir != "" {
+			t.Fatalf("plan %#v: want empty TopLevelDir for multi-top-level archive", plan)
+		}
+	}
+}
+
 func TestPlanEntriesRejectsTraversal(t *testing.T) {
 	root := t.TempDir()
 	for _, name := range []string{"../escape", "/absolute"} {

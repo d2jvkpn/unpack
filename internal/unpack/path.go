@@ -14,8 +14,10 @@ import (
 
 type plannedEntry struct {
 	Entry        archiveEntry
+	ArchiveName  string
 	RelativeName string
 	Destination  string
+	TopLevelDir  string
 }
 
 func planEntries(
@@ -30,6 +32,7 @@ func planEntries(
 		rootMarkers        []bool
 		topLevel           map[string]struct{}
 		base               string
+		singleTopLevelDir  string
 		stripTopLevel      string
 		syntheticDefault   bool
 		absBase            string
@@ -79,12 +82,16 @@ func planEntries(
 		} else {
 			base = workingDir
 		}
-	} else if len(topLevel) == 1 {
+	}
+	if len(topLevel) == 1 {
 		for top := range topLevel {
 			if isTopLevelDirectory(top, names, entries) {
-				stripTopLevel = top
+				singleTopLevelDir = top
 			}
 		}
+	}
+	if outputDir != "" {
+		stripTopLevel = singleTopLevelDir
 	}
 
 	absBase, err = filepath.Abs(base)
@@ -132,8 +139,10 @@ func planEntries(
 		}
 		plans = append(plans, plannedEntry{
 			Entry:        entry,
+			ArchiveName:  names[i],
 			RelativeName: filepath.FromSlash(relativeName),
 			Destination:  destination,
+			TopLevelDir:  singleTopLevelDir,
 		})
 	}
 

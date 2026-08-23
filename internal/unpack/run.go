@@ -17,7 +17,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workingDir string) i
 		overwrite     bool
 		showVersion   bool
 		extractionDir string
-		failed        bool
+		archivePath   string
+		selectors     []string
 	)
 
 	flags = flag.NewFlagSet("unpack", flag.ContinueOnError)
@@ -27,11 +28,15 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workingDir string) i
 	flags.BoolVar(&overwrite, "overwrite", false, "overwrite existing files and directories")
 	flags.BoolVar(&showVersion, "version", false, "print version information and exit")
 	flags.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: unpack [--cn] [--output-dir DIR] [--overwrite] [--version] ARCHIVE...")
+		fmt.Fprintln(stderr, "Usage: unpack [--cn] [--output-dir DIR] [--overwrite] [--version] ARCHIVE [FILE...]")
 		fmt.Fprintln(stderr, "  --cn                 decode legacy Chinese filenames as GBK")
 		fmt.Fprintln(stderr, "  --output-dir DIR     extract into DIR")
 		fmt.Fprintln(stderr, "  --overwrite          overwrite existing files and directories")
 		fmt.Fprintln(stderr, "  --version            print version information and exit")
+		fmt.Fprintln(stderr)
+		fmt.Fprintln(stderr, "  FILE...              extract only entries matching these selectors")
+		fmt.Fprintln(stderr, "                       (exact paths, directory prefixes, or globs;")
+		fmt.Fprintln(stderr, "                       globs may cross '/', e.g. *.md)")
 		fmt.Fprintln(stderr)
 		fmt.Fprintln(stderr, "Project: https://github.com/d2jvkpn/unpack")
 	}
@@ -61,13 +66,10 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workingDir string) i
 		extractionDir = filepath.Join(workingDir, extractionDir)
 	}
 
-	for _, archivePath := range flags.Args() {
-		if err := processArchive(archivePath, extractionDir, workingDir, chinese, overwrite, stdout); err != nil {
-			fmt.Fprintf(stderr, "Error: %v\n", err)
-			failed = true
-		}
-	}
-	if failed {
+	archivePath = flags.Args()[0]
+	selectors = flags.Args()[1:]
+	if err := processArchive(archivePath, extractionDir, workingDir, chinese, overwrite, selectors, stdout); err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 1
 	}
 	return 0
@@ -79,6 +81,7 @@ func processArchive(
 	workingDir string,
 	chinese bool,
 	overwrite bool,
+	selectors []string,
 	stdout io.Writer,
 ) error {
 	var (
@@ -101,6 +104,12 @@ func processArchive(
 	plans, resolvedBase, err = planEntries(entries, archivePath, outputDir, workingDir, format)
 	if err != nil {
 		return fmt.Errorf("plan archive %q: %w", archivePath, err)
+	}
+	if len(selectors) > 0 {
+		plans, err = filterPlans(plans, selectors)
+		if err != nil {
+			return fmt.Errorf("select files in archive %q: %w", archivePath, err)
+		}
 	}
 
 	fmt.Fprintf(stdout, "Extracting: %s\n", archivePath)
