@@ -74,25 +74,35 @@ def unzip(path, secret=None, output_dir=None):
                     with open(destination, "wb") as output_file:
                         output_file.write(archive.read(member))
             except Exception as err:
-                print("!!! write {}:".format(relative_name), err)
+                print("Failed to extract '{}': {}".format(relative_name, err))
+
 
 def main(argv):
-    p = argparse.ArgumentParser(description='解决unzip乱码')
-    p.add_argument('archives', type=str, nargs='*', help='ZIP 文件')
-    p.add_argument('-s', '--secret', action='store', default=None, help='密码')
-    p.add_argument('--output-dir', help='将解压结果放入指定目录')
+    p = argparse.ArgumentParser(
+        description='Extract ZIP archives with Chinese filenames'
+    )
+    p.add_argument('archives', type=str, nargs='*', help='ZIP archives to extract')
+    p.add_argument(
+        '-s',
+        '--secret',
+        action='store',
+        default=None,
+        help='Password for encrypted ZIP archives',
+    )
+    p.add_argument('-o', '--output-dir', help='Extract files into OUTPUT_DIR')
 
     args = p.parse_args(argv[1:])
 
     for path in args.archives:
         if path.endswith('.zip'):
             if os.path.exists(path):
-                print(fmt.format(1, 97, "  ++ unzip:"), path)
+                print(fmt.format(1, 97, "Extracting:"), path)
                 unzip(path, secret=args.secret, output_dir=args.output_dir)
             else:
-                print(fmt.format(1, 91, "  !! file doesn't exist."), path)
+                print(fmt.format(1, 91, "File not found:"), path)
         else:
-            print(fmt.format(1, 91, "  !! file isn't a zip file."), path)
+            print(fmt.format(1, 91, "Not a ZIP file:"), path)
+
 
 if __name__ == '__main__':
     argv = sys.argv

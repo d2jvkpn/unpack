@@ -1,9 +1,9 @@
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
 import zipfile
-import os
 from pathlib import Path
 
 
@@ -158,6 +158,55 @@ class UnzipCnCliTests(unittest.TestCase):
             self.assertEqual(
                 (working_directory / "file.txt").read_text(), "content"
             )
+
+    def test_short_output_dir_alias_extracts_into_requested_directory(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            working_directory = Path(temporary_directory)
+            archive_path = working_directory / "archive.zip"
+            self.make_zip(archive_path, {"file.txt": "content"})
+
+            result = self.run_script(
+                working_directory, "-o", "result", archive_path
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                (working_directory / "result/file.txt").read_text(), "content"
+            )
+
+    def test_help_describes_the_cli_in_english(self):
+        result = self.run_script(SCRIPT.parent, "--help")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Extract ZIP archives with Chinese filenames", result.stdout)
+        self.assertIn("ZIP archives to extract", result.stdout)
+        self.assertIn("Password for encrypted ZIP archives", result.stdout)
+        self.assertIn("-o, --output-dir OUTPUT_DIR", result.stdout)
+        self.assertIn("Extract files into OUTPUT_DIR", result.stdout)
+
+    def test_runtime_messages_are_clear_english(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            working_directory = Path(temporary_directory)
+            archive_path = working_directory / "archive.zip"
+            non_zip_path = working_directory / "notes.txt"
+            self.make_zip(
+                archive_path,
+                {"safe.txt": "safe", "../escaped.txt": "escaped"},
+            )
+            non_zip_path.write_text("not a ZIP")
+
+            result = self.run_script(
+                working_directory,
+                archive_path,
+                working_directory / "missing.zip",
+                non_zip_path,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("Extracting:", result.stdout)
+            self.assertIn("Failed to extract '../escaped.txt':", result.stdout)
+            self.assertIn("File not found:", result.stdout)
+            self.assertIn("Not a ZIP file:", result.stdout)
 
 
 if __name__ == "__main__":
