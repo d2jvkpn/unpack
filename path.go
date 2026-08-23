@@ -25,9 +25,24 @@ func planEntries(
 	workingDir string,
 	format archiveFormat,
 ) ([]plannedEntry, string, error) {
-	names := make([]string, len(entries))
-	rootMarkers := make([]bool, len(entries))
-	topLevel := make(map[string]struct{})
+	var (
+		names              []string
+		rootMarkers        []bool
+		topLevel           map[string]struct{}
+		base               string
+		stripTopLevel      string
+		syntheticDefault   bool
+		absBase            string
+		resolvedBase       string
+		absWorkingDir      string
+		resolvedWorkingDir string
+		plans              []plannedEntry
+		err                error
+	)
+
+	names = make([]string, len(entries))
+	rootMarkers = make([]bool, len(entries))
+	topLevel = make(map[string]struct{})
 	for i, entry := range entries {
 		switch entry.Kind {
 		case entryFile, entryDirectory:
@@ -52,9 +67,7 @@ func planEntries(
 		return nil, "", err
 	}
 
-	base := outputDir
-	stripTopLevel := ""
-	syntheticDefault := false
+	base = outputDir
 	if outputDir == "" {
 		if len(topLevel) > 1 {
 			stem := archiveBaseName(archivePath, format)
@@ -74,20 +87,20 @@ func planEntries(
 		}
 	}
 
-	absBase, err := filepath.Abs(base)
+	absBase, err = filepath.Abs(base)
 	if err != nil {
 		return nil, "", fmt.Errorf("resolve extraction base %q: %w", base, err)
 	}
-	resolvedBase, err := resolveExistingPath(absBase)
+	resolvedBase, err = resolveExistingPath(absBase)
 	if err != nil {
 		return nil, "", fmt.Errorf("resolve extraction base %q: %w", absBase, err)
 	}
 	if syntheticDefault {
-		absWorkingDir, err := filepath.Abs(workingDir)
+		absWorkingDir, err = filepath.Abs(workingDir)
 		if err != nil {
 			return nil, "", fmt.Errorf("resolve working directory %q: %w", workingDir, err)
 		}
-		resolvedWorkingDir, err := resolveExistingPath(absWorkingDir)
+		resolvedWorkingDir, err = resolveExistingPath(absWorkingDir)
 		if err != nil {
 			return nil, "", fmt.Errorf("resolve working directory %q: %w", absWorkingDir, err)
 		}
@@ -96,7 +109,7 @@ func planEntries(
 		}
 	}
 
-	plans := make([]plannedEntry, 0, len(entries))
+	plans = make([]plannedEntry, 0, len(entries))
 	for i, entry := range entries {
 		if rootMarkers[i] {
 			continue
@@ -128,11 +141,13 @@ func planEntries(
 }
 
 func normalizeArchivePath(name string) (string, error) {
+	var cleaned string
+
 	name = strings.ReplaceAll(name, "\\", "/")
 	if name == "" || path.IsAbs(name) || isDriveRootPath(name) {
 		return "", errors.New("path is empty or absolute")
 	}
-	cleaned := path.Clean(name)
+	cleaned = path.Clean(name)
 	if cleaned == ".." || strings.HasPrefix(cleaned, "../") {
 		return "", errors.New("path traverses outside the extraction directory")
 	}
@@ -144,7 +159,12 @@ func isDriveRootPath(name string) bool {
 }
 
 func rejectFileTopLevelAncestors(names []string, entries []archiveEntry) error {
-	topLevelFiles := make(map[string]int)
+	var (
+		topLevelFiles    map[string]int
+		firstDescendants map[string]int
+	)
+
+	topLevelFiles = make(map[string]int)
 	for i, name := range names {
 		if entries[i].Kind != entryFile || strings.Contains(name, "/") {
 			continue
@@ -153,7 +173,7 @@ func rejectFileTopLevelAncestors(names []string, entries []archiveEntry) error {
 			topLevelFiles[name] = i
 		}
 	}
-	firstDescendants := make(map[string]int)
+	firstDescendants = make(map[string]int)
 	for j, descendant := range names {
 		topLevel, _, hasDescendant := strings.Cut(descendant, "/")
 		if !hasDescendant {
@@ -191,11 +211,17 @@ func isTopLevelDirectory(top string, names []string, entries []archiveEntry) boo
 }
 
 func resolveExistingPath(name string) (string, error) {
+	var (
+		missing  []string
+		existing string
+		resolved string
+		err      error
+	)
+
 	name = filepath.Clean(name)
-	var missing []string
-	existing := name
+	existing = name
 	for {
-		_, err := os.Lstat(existing)
+		_, err = os.Lstat(existing)
 		if err == nil {
 			break
 		}
@@ -210,7 +236,7 @@ func resolveExistingPath(name string) (string, error) {
 		existing = parent
 	}
 
-	resolved, err := filepath.EvalSymlinks(existing)
+	resolved, err = filepath.EvalSymlinks(existing)
 	if err != nil {
 		return "", err
 	}
@@ -221,7 +247,12 @@ func resolveExistingPath(name string) (string, error) {
 }
 
 func requireWithin(base string, destination string) error {
-	relative, err := filepath.Rel(base, destination)
+	var (
+		relative string
+		err      error
+	)
+
+	relative, err = filepath.Rel(base, destination)
 	if err != nil {
 		return err
 	}
@@ -232,7 +263,12 @@ func requireWithin(base string, destination string) error {
 }
 
 func requireStrictlyWithin(base string, destination string) error {
-	relative, err := filepath.Rel(base, destination)
+	var (
+		relative string
+		err      error
+	)
+
+	relative, err = filepath.Rel(base, destination)
 	if err != nil {
 		return err
 	}
@@ -255,9 +291,14 @@ func newDirectoryFinalizer() *directoryFinalizer {
 }
 
 func (d *directoryFinalizer) ensure(name string) error {
+	var (
+		missing []string
+		current string
+	)
+
 	name = filepath.Clean(name)
-	missing := make([]string, 0)
-	current := name
+	missing = make([]string, 0)
+	current = name
 	for {
 		info, err := os.Stat(current)
 		if err == nil {
@@ -301,13 +342,20 @@ func (d *directoryFinalizer) recordMode(name string, mode fs.FileMode) {
 }
 
 func (d *directoryFinalizer) finalize() error {
-	directories := make([]string, 0, len(d.created))
+	var directories []string
+
+	directories = make([]string, 0, len(d.created))
 	for directory := range d.created {
 		directories = append(directories, directory)
 	}
 	sort.Slice(directories, func(i, j int) bool {
-		leftDepth := strings.Count(filepath.Clean(directories[i]), string(filepath.Separator))
-		rightDepth := strings.Count(filepath.Clean(directories[j]), string(filepath.Separator))
+		var (
+			leftDepth  int
+			rightDepth int
+		)
+
+		leftDepth = strings.Count(filepath.Clean(directories[i]), string(filepath.Separator))
+		rightDepth = strings.Count(filepath.Clean(directories[j]), string(filepath.Separator))
 		if leftDepth != rightDepth {
 			return leftDepth > rightDepth
 		}
@@ -330,14 +378,19 @@ func writeNewFile(
 	mode fs.FileMode,
 	write func(io.Writer) error,
 ) (skipped bool, err error) {
+	var (
+		permissions fs.FileMode
+		file        *os.File
+	)
+
 	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
 		return false, fmt.Errorf("create parent directories for %q: %w", destination, err)
 	}
-	permissions := mode.Perm() & 0o777
+	permissions = mode.Perm() & 0o777
 	if permissions == 0 {
 		permissions = 0o644
 	}
-	file, err := os.OpenFile(destination, os.O_WRONLY|os.O_CREATE|os.O_EXCL, permissions)
+	file, err = os.OpenFile(destination, os.O_WRONLY|os.O_CREATE|os.O_EXCL, permissions)
 	if errors.Is(err, fs.ErrExist) {
 		return true, nil
 	}
@@ -358,8 +411,13 @@ func writeNewFile(
 }
 
 func removePartialFile(destination string, file *os.File, writeErr error) error {
-	closeErr := file.Close()
-	removeErr := os.Remove(destination)
+	var (
+		closeErr  error
+		removeErr error
+	)
+
+	closeErr = file.Close()
+	removeErr = os.Remove(destination)
 	if removeErr != nil {
 		removeErr = fmt.Errorf("remove partial file %q: %w", destination, removeErr)
 	}

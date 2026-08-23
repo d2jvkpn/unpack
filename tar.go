@@ -13,13 +13,20 @@ import (
 )
 
 func openTAR(path string, format archiveFormat) (*tar.Reader, func() error, error) {
-	file, err := os.Open(path)
+	var (
+		file         *os.File
+		reader       io.Reader
+		gzipReader   *gzip.Reader
+		closeArchive func() error
+		err          error
+	)
+
+	file, err = os.Open(path)
 	if err != nil {
 		return nil, nil, fmt.Errorf("open TAR archive %q: %w", path, err)
 	}
 
-	var reader io.Reader = file
-	var gzipReader *gzip.Reader
+	reader = file
 	switch format {
 	case formatTAR:
 	case formatTarGzip:
@@ -32,20 +39,31 @@ func openTAR(path string, format archiveFormat) (*tar.Reader, func() error, erro
 		return nil, nil, errors.Join(fmt.Errorf("unsupported TAR format %d", format), file.Close())
 	}
 
-	closeArchive := func() error {
+	closeArchive = func() error {
+		var (
+			drainErr     error
+			gzipCloseErr error
+			fileCloseErr error
+		)
+
 		if gzipReader == nil {
 			return file.Close()
 		}
-		_, drainErr := io.Copy(io.Discard, gzipReader)
-		gzipCloseErr := gzipReader.Close()
-		fileCloseErr := file.Close()
+		_, drainErr = io.Copy(io.Discard, gzipReader)
+		gzipCloseErr = gzipReader.Close()
+		fileCloseErr = file.Close()
 		return errors.Join(drainErr, gzipCloseErr, fileCloseErr)
 	}
 	return tar.NewReader(reader), closeArchive, nil
 }
 
 func scanTAR(path string, format archiveFormat, chinese bool) (entries []archiveEntry, err error) {
-	reader, closeArchive, err := openTAR(path, format)
+	var (
+		reader       *tar.Reader
+		closeArchive func() error
+	)
+
+	reader, closeArchive, err = openTAR(path, format)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +85,7 @@ func scanTAR(path string, format archiveFormat, chinese bool) (entries []archive
 			return nil, fmt.Errorf("decode TAR entry %q: %w", header.Name, decodeErr)
 		}
 
-		var kind entryKind
+		kind := entryKind(0)
 		switch header.Typeflag {
 		case tar.TypeReg, tar.TypeRegA:
 			kind = entryFile
@@ -86,7 +104,14 @@ func scanTAR(path string, format archiveFormat, chinese bool) (entries []archive
 }
 
 func extractTAR(path string, format archiveFormat, plans []plannedEntry) (skippedEntries []string, err error) {
-	reader, closeArchive, err := openTAR(path, format)
+	var (
+		reader       *tar.Reader
+		closeArchive func() error
+		nextPlan     int
+		directories  *directoryFinalizer
+	)
+
+	reader, closeArchive, err = openTAR(path, format)
 	if err != nil {
 		return nil, err
 	}
@@ -105,8 +130,7 @@ func extractTAR(path string, format archiveFormat, plans []plannedEntry) (skippe
 		}
 	}
 
-	nextPlan := 0
-	directories := newDirectoryFinalizer()
+	directories = newDirectoryFinalizer()
 	for index := 0; ; index++ {
 		_, nextErr := reader.Next()
 		if errors.Is(nextErr, io.EOF) {
@@ -121,7 +145,11 @@ func extractTAR(path string, format archiveFormat, plans []plannedEntry) (skippe
 
 		plan := plans[nextPlan]
 		if plan.Entry.SourceIndex < index {
-			return skippedEntries, fmt.Errorf("TAR entry %q has missing source index %d", plan.Entry.Name, plan.Entry.SourceIndex)
+			return skippedEntries, fmt.Errorf(
+				"TAR entry %q has missing source index %d",
+				plan.Entry.Name,
+				plan.Entry.SourceIndex,
+			)
 		}
 		if plan.Entry.SourceIndex != index {
 			continue
@@ -138,7 +166,9 @@ func extractTAR(path string, format archiveFormat, plans []plannedEntry) (skippe
 				return skippedEntries, fmt.Errorf("create parent directories for TAR entry %q: %w", plan.Entry.Name, mkdirErr)
 			}
 			skipped, writeErr := writeNewFile(plan.Destination, plan.Entry.Mode, func(writer io.Writer) error {
-				_, copyErr := io.Copy(writer, reader)
+				var copyErr error
+
+				_, copyErr = io.Copy(writer, reader)
 				return copyErr
 			})
 			if writeErr != nil {

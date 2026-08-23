@@ -10,7 +10,9 @@ import (
 )
 
 func scanZIP(path string, chinese bool) (entries []archiveEntry, err error) {
-	reader, err := zip.OpenReader(path)
+	var reader *zip.ReadCloser
+
+	reader, err = zip.OpenReader(path)
 	if err != nil {
 		return nil, fmt.Errorf("open ZIP archive %q: %w", path, err)
 	}
@@ -41,7 +43,12 @@ func scanZIP(path string, chinese bool) (entries []archiveEntry, err error) {
 }
 
 func extractZIP(path string, plans []plannedEntry) (skippedEntries []string, err error) {
-	reader, err := zip.OpenReader(path)
+	var (
+		reader      *zip.ReadCloser
+		directories *directoryFinalizer
+	)
+
+	reader, err = zip.OpenReader(path)
 	if err != nil {
 		return nil, fmt.Errorf("open ZIP archive %q: %w", path, err)
 	}
@@ -59,7 +66,7 @@ func extractZIP(path string, plans []plannedEntry) (skippedEntries []string, err
 	}
 
 	skippedEntries = make([]string, 0)
-	directories := newDirectoryFinalizer()
+	directories = newDirectoryFinalizer()
 	for _, plan := range plans {
 		file := reader.File[plan.Entry.SourceIndex]
 		switch plan.Entry.Kind {
@@ -73,12 +80,19 @@ func extractZIP(path string, plans []plannedEntry) (skippedEntries []string, err
 				return skippedEntries, fmt.Errorf("create parent directories for ZIP entry %q: %w", plan.Entry.Name, err)
 			}
 			skipped, err := writeNewFile(plan.Destination, plan.Entry.Mode, func(writer io.Writer) error {
-				entryReader, err := file.Open()
+				var (
+					entryReader io.ReadCloser
+					copyErr     error
+					closeErr    error
+					err         error
+				)
+
+				entryReader, err = file.Open()
 				if err != nil {
 					return fmt.Errorf("open ZIP entry %q: %w", plan.Entry.Name, err)
 				}
-				_, copyErr := io.Copy(writer, entryReader)
-				closeErr := entryReader.Close()
+				_, copyErr = io.Copy(writer, entryReader)
+				closeErr = entryReader.Close()
 				return errors.Join(copyErr, closeErr)
 			})
 			if err != nil {
@@ -111,7 +125,9 @@ func zipEntryKind(file *zip.File) (entryKind, error) {
 }
 
 func directoryMode(mode fs.FileMode) fs.FileMode {
-	permissions := mode.Perm() & 0o777
+	var permissions fs.FileMode
+
+	permissions = mode.Perm() & 0o777
 	if permissions == 0 {
 		return 0o755
 	}

@@ -30,7 +30,9 @@ type archiveEntry struct {
 }
 
 func detectFormat(path string) (archiveFormat, error) {
-	lower := strings.ToLower(path)
+	var lower string
+
+	lower = strings.ToLower(path)
 	switch {
 	case strings.HasSuffix(lower, ".tar.gz"), strings.HasSuffix(lower, ".tgz"):
 		return formatTarGzip, nil
@@ -44,9 +46,15 @@ func detectFormat(path string) (archiveFormat, error) {
 }
 
 func archiveBaseName(path string, format archiveFormat) string {
-	name := filepath.Base(path)
-	lower := strings.ToLower(name)
-	suffix := map[archiveFormat]string{
+	var (
+		name   string
+		lower  string
+		suffix string
+	)
+
+	name = filepath.Base(path)
+	lower = strings.ToLower(name)
+	suffix = map[archiveFormat]string{
 		formatZIP: ".zip", formatTAR: ".tar", formatTarGzip: ".tgz",
 	}[format]
 	if format == formatTarGzip && strings.HasSuffix(lower, ".tar.gz") {

@@ -11,10 +11,18 @@ import (
 )
 
 func run(args []string, stdout io.Writer, stderr io.Writer, workingDir string) int {
-	flags := flag.NewFlagSet("unpack", flag.ContinueOnError)
+	var (
+		flags         *flag.FlagSet
+		chinese       *bool
+		outputDir     *string
+		extractionDir string
+		failed        bool
+	)
+
+	flags = flag.NewFlagSet("unpack", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	chinese := flags.Bool("cn", false, "decode legacy Chinese filenames as GBK")
-	outputDir := flags.String("output-dir", "", "extract into DIR")
+	chinese = flags.Bool("cn", false, "decode legacy Chinese filenames as GBK")
+	outputDir = flags.String("output-dir", "", "extract into DIR")
 	flags.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: unpack [--cn] [--output-dir DIR] ARCHIVE...")
 		fmt.Fprintln(stderr, "  --cn                 decode legacy Chinese filenames as GBK")
@@ -35,12 +43,11 @@ func run(args []string, stdout io.Writer, stderr io.Writer, workingDir string) i
 		flags.Usage()
 		return 2
 	}
-	extractionDir := *outputDir
+	extractionDir = *outputDir
 	if extractionDir != "" && !filepath.IsAbs(extractionDir) {
 		extractionDir = filepath.Join(workingDir, extractionDir)
 	}
 
-	failed := false
 	for _, archivePath := range flags.Args() {
 		if err := processArchive(archivePath, extractionDir, workingDir, *chinese, stdout); err != nil {
 			fmt.Fprintf(stderr, "Error: %v\n", err)
@@ -60,21 +67,29 @@ func processArchive(
 	chinese bool,
 	stdout io.Writer,
 ) error {
-	format, err := detectFormat(archivePath)
+	var (
+		format  archiveFormat
+		entries []archiveEntry
+		plans   []plannedEntry
+		skipped []string
+		err     error
+	)
+
+	format, err = detectFormat(archivePath)
 	if err != nil {
 		return fmt.Errorf("process archive %q: %w", archivePath, err)
 	}
-	entries, err := scanArchive(archivePath, format, chinese)
+	entries, err = scanArchive(archivePath, format, chinese)
 	if err != nil {
 		return err
 	}
-	plans, _, err := planEntries(entries, archivePath, outputDir, workingDir, format)
+	plans, _, err = planEntries(entries, archivePath, outputDir, workingDir, format)
 	if err != nil {
 		return fmt.Errorf("plan archive %q: %w", archivePath, err)
 	}
 
 	fmt.Fprintf(stdout, "Extracting: %s\n", archivePath)
-	skipped, err := extractArchive(archivePath, format, plans)
+	skipped, err = extractArchive(archivePath, format, plans)
 	for _, relativeName := range skipped {
 		fmt.Fprintf(stdout, "Skipping existing file: %s\n", relativeName)
 	}
@@ -85,7 +100,8 @@ func processArchive(
 }
 
 func validateOptionSyntax(args []string) error {
-	skipOperand := false
+	var skipOperand bool
+
 	for _, arg := range args {
 		if skipOperand {
 			skipOperand = false
@@ -112,7 +128,12 @@ func validateOptionSyntax(args []string) error {
 }
 
 func main() {
-	workingDir, err := os.Getwd()
+	var (
+		workingDir string
+		err        error
+	)
+
+	workingDir, err = os.Getwd()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: get current working directory: %v\n", err)
 		os.Exit(1)

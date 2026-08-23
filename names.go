@@ -9,10 +9,15 @@ import (
 )
 
 func decodeArchiveName(raw string, chinese bool, legacy bool) (string, error) {
+	var (
+		decoded string
+		err     error
+	)
+
 	if !chinese || !legacy {
 		return raw, nil
 	}
-	decoded, _, err := transform.String(simplifiedchinese.GBK.NewDecoder(), raw)
+	decoded, _, err = transform.String(simplifiedchinese.GBK.NewDecoder(), raw)
 	if err != nil {
 		return "", fmt.Errorf("decode GBK filename %q: %w", raw, err)
 	}
