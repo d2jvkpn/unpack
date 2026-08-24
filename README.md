@@ -41,11 +41,15 @@ You can also copy the binary produced by the build command to a directory on you
 unpack [--cn] [--output-dir DIR] [--overwrite] [--version] ARCHIVE [FILE...]
 ```
 
-Exactly one archive path is required. Supported filename extensions are `.zip`, `.tar`, `.tar.gz`,
-and `.tgz`, matched case-insensitively. Any arguments after the archive are file selectors (see
+Exactly one archive is required, given as a local path or an `http://`/`https://` URL. A URL is
+downloaded to a temporary file (following up to 5 redirects, with a 10-second response-header
+timeout and a 5-minute overall download timeout) before the usual extraction logic runs; the
+temporary file and its containing directory are removed afterward. Supported filename extensions
+are `.zip`, `.tar`, `.tar.gz`, and `.tgz`, matched case-insensitively against the archive's final
+(post-redirect) filename. Any arguments after the archive are file selectors (see
 [Selecting specific files](#selecting-specific-files)); with none, the whole archive is extracted.
 The final status is zero on success, one when the archive fails to process (including a selector
-matching nothing), and two for invalid command usage.
+matching nothing or a download failure), and two for invalid command usage.
 
 `--output-dir` has no short `-o` alias. `--overwrite` and `--version` have no short aliases either.
 
@@ -202,4 +206,10 @@ Print version information:
 
 ```sh
 unpack --version
+```
+
+Extract an archive directly from a URL:
+
+```sh
+unpack https://example.com/releases/photos.zip
 ```

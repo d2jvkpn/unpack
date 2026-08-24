@@ -38,6 +38,9 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workingDir string) i
 		fmt.Fprintln(stderr, "                       (exact paths, directory prefixes, or globs;")
 		fmt.Fprintln(stderr, "                       globs may cross '/', e.g. *.md)")
 		fmt.Fprintln(stderr)
+		fmt.Fprintln(stderr, "  ARCHIVE may be a local path or an http(s):// URL, downloaded to a")
+		fmt.Fprintln(stderr, "  temporary file before extraction.")
+		fmt.Fprintln(stderr)
 		fmt.Fprintln(stderr, "Project: https://github.com/d2jvkpn/unpack")
 	}
 
@@ -75,6 +78,16 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workingDir string) i
 	}
 
 	archivePath = flags.Args()[0]
+	if isRemoteURL(archivePath) {
+		fmt.Fprintf(stdout, "Downloading: %s\n", archivePath)
+		localPath, cleanup, err := downloadArchive(archivePath)
+		if err != nil {
+			fmt.Fprintf(stderr, "Error: %v\n", err)
+			return 1
+		}
+		defer cleanup()
+		archivePath = localPath
+	}
 	selectors = flags.Args()[1:]
 	if err := processArchive(archivePath, extractionDir, workingDir, chinese, overwrite, selectors, stdout); err != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", err)

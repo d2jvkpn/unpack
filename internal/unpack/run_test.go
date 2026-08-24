@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"errors"
 	"io/fs"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -428,6 +430,34 @@ func TestRunExtractsBothSupportedFormats(t *testing.T) {
 			t.Fatalf("Run() status = %d, stderr = %q", status, stderr.String())
 		}
 		assertFileContents(t, filepath.Join(outputDir, tt.fileName), tt.body)
+	}
+}
+
+func TestRunDownloadsArchiveFromURL(t *testing.T) {
+	root := t.TempDir()
+	archivePath := filepath.Join(root, "bundle.zip")
+	writeZIPFixture(t, archivePath, []zipFixture{{Name: "note.txt", Body: "downloaded"}})
+	archiveBytes, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := w.Write(archiveBytes); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer server.Close()
+	outputDir := filepath.Join(root, "output")
+	var stdout, stderr bytes.Buffer
+
+	status := Run([]string{"--output-dir", outputDir, server.URL + "/bundle.zip"}, &stdout, &stderr, root)
+
+	if status != 0 {
+		t.Fatalf("Run() status = %d, stderr = %q", status, stderr.String())
+	}
+	assertFileContents(t, filepath.Join(outputDir, "note.txt"), "downloaded")
+	if !strings.Contains(stdout.String(), "Downloading: "+server.URL+"/bundle.zip") {
+		t.Fatalf("stdout = %q, want download progress", stdout.String())
 	}
 }
 
