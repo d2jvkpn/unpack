@@ -31,9 +31,9 @@ func TestIsRemoteURL(t *testing.T) {
 	}
 }
 
-func TestFetchArchiveFollowsRedirectAndUsesFinalFilename(t *testing.T) {
+func TestFetchArchiveFollowsRedirectAndUsesInputFilename(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/start", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/start/original.zip", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/final/archive.zip", http.StatusFound)
 	})
 	mux.HandleFunc("/final/archive.zip", func(w http.ResponseWriter, r *http.Request) {
@@ -45,14 +45,14 @@ func TestFetchArchiveFollowsRedirectAndUsesFinalFilename(t *testing.T) {
 	defer server.Close()
 	client := newDownloadClient(5*time.Second, 5*time.Second, 5)
 
-	localPath, cleanup, err := fetchArchive(server.URL+"/start", client)
+	localPath, cleanup, err := fetchArchive(server.URL+"/start/original.zip", client)
 	if err != nil {
 		t.Fatalf("fetchArchive() error = %v", err)
 	}
 	defer cleanup()
 
-	if got := filepath.Base(localPath); got != "archive.zip" {
-		t.Fatalf("filepath.Base(localPath) = %q, want %q", got, "archive.zip")
+	if got := filepath.Base(localPath); got != "original.zip" {
+		t.Fatalf("filepath.Base(localPath) = %q, want %q", got, "original.zip")
 	}
 	contents, err := os.ReadFile(localPath)
 	if err != nil || string(contents) != "payload" {

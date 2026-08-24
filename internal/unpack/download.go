@@ -47,11 +47,21 @@ func downloadArchive(rawURL string) (string, func(), error) {
 
 func fetchArchive(rawURL string, client *http.Client) (localPath string, cleanup func(), err error) {
 	var (
-		resp     *http.Response
+		parsed   *url.URL
 		filename string
+		resp     *http.Response
 		tempDir  string
 		file     *os.File
 	)
+
+	parsed, err = url.Parse(rawURL)
+	if err != nil {
+		return "", nil, fmt.Errorf("download %q: %w", rawURL, err)
+	}
+	filename, err = downloadFilename(parsed)
+	if err != nil {
+		return "", nil, fmt.Errorf("download %q: %w", rawURL, err)
+	}
 
 	resp, err = client.Get(rawURL)
 	if err != nil {
@@ -61,11 +71,6 @@ func fetchArchive(rawURL string, client *http.Client) (localPath string, cleanup
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", nil, fmt.Errorf("download %q: unexpected status %s", rawURL, resp.Status)
-	}
-
-	filename, err = downloadFilename(resp.Request.URL)
-	if err != nil {
-		return "", nil, fmt.Errorf("download %q: %w", rawURL, err)
 	}
 
 	tempDir, err = os.MkdirTemp("", "unpack-download-*")

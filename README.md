@@ -45,8 +45,9 @@ Exactly one archive is required, given as a local path or an `http://`/`https://
 downloaded to a temporary file (following up to 5 redirects, with a 10-second response-header
 timeout and a 5-minute overall download timeout) before the usual extraction logic runs; the
 temporary file and its containing directory are removed afterward. Supported filename extensions
-are `.zip`, `.tar`, `.tar.gz`, and `.tgz`, matched case-insensitively against the archive's final
-(post-redirect) filename. Any arguments after the archive are file selectors (see
+are `.zip`, `.tar`, `.tar.gz`, and `.tgz`, matched case-insensitively against the filename taken
+from the input URL (redirects are followed for the download itself but do not change the filename
+used). Any arguments after the archive are file selectors (see
 [Selecting specific files](#selecting-specific-files)); with none, the whole archive is extracted.
 The final status is zero on success, one when the archive fails to process (including a selector
 matching nothing or a download failure), and two for invalid command usage.
