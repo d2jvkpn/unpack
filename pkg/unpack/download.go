@@ -18,7 +18,8 @@ const (
 	downloadMaxRedirects  = 5
 )
 
-func isRemoteURL(candidate string) bool {
+// IsRemoteURL reports whether candidate looks like an http(s) URL rather than a local file path.
+func IsRemoteURL(candidate string) bool {
 	return strings.HasPrefix(candidate, "http://") || strings.HasPrefix(candidate, "https://")
 }
 
@@ -41,7 +42,10 @@ func newDownloadClient(timeout time.Duration, headerTimeout time.Duration, maxRe
 	}
 }
 
-func downloadArchive(rawURL string) (string, func(), error) {
+// Download fetches rawURL into a temporary file and returns its local path and a cleanup
+// function that removes the temporary file and its containing directory. The caller is
+// responsible for calling cleanup once done with the file.
+func Download(rawURL string) (string, func(), error) {
 	return fetchArchive(rawURL, newDownloadClient(downloadTimeout, downloadHeaderTimeout, downloadMaxRedirects))
 }
 

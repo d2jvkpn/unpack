@@ -1,45 +1,51 @@
 package unpack
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestFilterPlansKeepsOnlyMatchedEntries(t *testing.T) {
-	plans := []plannedEntry{
+	plans := []Plan{
 		{ArchiveName: "a.txt"},
 		{ArchiveName: "b.txt"},
 		{ArchiveName: "docs/c.txt"},
 	}
 
-	filtered, err := filterPlans(plans, []string{"a.txt", "docs"})
+	filtered, err := FilterPlans(plans, []string{"a.txt", "docs"})
 	if err != nil {
-		t.Fatalf("filterPlans() error = %v", err)
+		t.Fatalf("FilterPlans() error = %v", err)
 	}
 	if len(filtered) != 2 || filtered[0].ArchiveName != "a.txt" || filtered[1].ArchiveName != "docs/c.txt" {
-		t.Fatalf("filterPlans() = %#v", filtered)
+		t.Fatalf("FilterPlans() = %#v", filtered)
 	}
 }
 
 func TestFilterPlansErrorsOnUnmatchedSelector(t *testing.T) {
-	plans := []plannedEntry{{ArchiveName: "a.txt"}}
+	plans := []Plan{{ArchiveName: "a.txt"}}
 
-	_, err := filterPlans(plans, []string{"a.txt", "missing.txt"})
+	_, err := FilterPlans(plans, []string{"a.txt", "missing.txt"})
 	if err == nil {
-		t.Fatal("filterPlans() with unmatched selector succeeded")
+		t.Fatal("FilterPlans() with unmatched selector succeeded")
+	}
+	if !errors.Is(err, ErrNoMatch) {
+		t.Fatalf("FilterPlans() error = %v, want ErrNoMatch", err)
 	}
 }
 
 func TestFilterPlansUsesTopLevelDirForMatching(t *testing.T) {
-	plans := []plannedEntry{
+	plans := []Plan{
 		{ArchiveName: "myproj", TopLevelDir: "myproj"},
 		{ArchiveName: "myproj/src/main.go", TopLevelDir: "myproj"},
 		{ArchiveName: "myproj/README.md", TopLevelDir: "myproj"},
 	}
 
-	filtered, err := filterPlans(plans, []string{"src/main.go"})
+	filtered, err := FilterPlans(plans, []string{"src/main.go"})
 	if err != nil {
-		t.Fatalf("filterPlans() error = %v", err)
+		t.Fatalf("FilterPlans() error = %v", err)
 	}
 	if len(filtered) != 1 || filtered[0].ArchiveName != "myproj/src/main.go" {
-		t.Fatalf("filterPlans() = %#v", filtered)
+		t.Fatalf("FilterPlans() = %#v", filtered)
 	}
 }
 

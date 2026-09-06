@@ -12,21 +12,26 @@ import (
 	"strings"
 )
 
-type plannedEntry struct {
-	Entry        archiveEntry
+// Plan is a single archive entry paired with its validated destination path.
+type Plan struct {
+	Entry        Entry
 	ArchiveName  string
 	RelativeName string
 	Destination  string
 	TopLevelDir  string
 }
 
-func planEntries(
-	entries []archiveEntry,
+// PlanEntries validates every entry and computes its destination path, resolving the smart
+// default destination when outputDir is empty. It returns ErrUnsafeEntry, wrapped with details,
+// before anything is written to disk: absolute paths, path traversal, and symlink-escape targets
+// are all rejected here.
+func PlanEntries(
+	entries []Entry,
 	archivePath string,
 	outputDir string,
 	workingDir string,
-	format archiveFormat,
-) ([]plannedEntry, string, error) {
+	format Format,
+) ([]Plan, string, error) {
 	var (
 		names              []string
 		rootMarkers        []bool
@@ -39,7 +44,7 @@ func planEntries(
 		resolvedBase       string
 		absWorkingDir      string
 		resolvedWorkingDir string
-		plans              []plannedEntry
+		plans              []Plan
 		err                error
 	)
 
@@ -48,18 +53,18 @@ func planEntries(
 	topLevel = make(map[string]struct{})
 	for i, entry := range entries {
 		switch entry.Kind {
-		case entryFile, entryDirectory, entrySymlink:
+		case EntryFile, EntryDirectory, EntrySymlink:
 		default:
-			return nil, "", fmt.Errorf("unsafe archive entry %q: unsupported entry kind %d", entry.Name, entry.Kind)
+			return nil, "", fmt.Errorf("%w: %q: unsupported entry kind %d", ErrUnsafeEntry, entry.Name, entry.Kind)
 		}
 		name, err := normalizeArchivePath(entry.Name)
 		if err != nil {
-			return nil, "", fmt.Errorf("unsafe archive entry %q: %w", entry.Name, err)
+			return nil, "", fmt.Errorf("%w: %q: %w", ErrUnsafeEntry, entry.Name, err)
 		}
 		names[i] = name
 		if name == "." {
-			if entry.Kind != entryDirectory {
-				return nil, "", fmt.Errorf("unsafe archive entry %q: root marker is not a directory", entry.Name)
+			if entry.Kind != EntryDirectory {
+				return nil, "", fmt.Errorf("%w: %q: root marker is not a directory", ErrUnsafeEntry, entry.Name)
 			}
 			rootMarkers[i] = true
 			continue
@@ -67,17 +72,17 @@ func planEntries(
 		topLevel[strings.SplitN(name, "/", 2)[0]] = struct{}{}
 	}
 	if err := rejectFileTopLevelAncestors(names, entries); err != nil {
-		return nil, "", err
+		return nil, "", fmt.Errorf("%w: %w", ErrUnsafeEntry, err)
 	}
 	if err := rejectSymlinkAncestors(names, entries); err != nil {
-		return nil, "", err
+		return nil, "", fmt.Errorf("%w: %w", ErrUnsafeEntry, err)
 	}
 	for i, entry := range entries {
-		if entry.Kind != entrySymlink || rootMarkers[i] {
+		if entry.Kind != EntrySymlink || rootMarkers[i] {
 			continue
 		}
 		if err := validateSymlinkTarget(names[i], entry.LinkTarget); err != nil {
-			return nil, "", fmt.Errorf("unsafe archive entry %q: %w", entry.Name, err)
+			return nil, "", fmt.Errorf("%w: %q: %w", ErrUnsafeEntry, entry.Name, err)
 		}
 	}
 
@@ -86,7 +91,7 @@ func planEntries(
 		if len(topLevel) > 1 {
 			stem := archiveBaseName(archivePath, format)
 			if !filepath.IsLocal(stem) || filepath.Clean(stem) == "." {
-				return nil, "", fmt.Errorf("unsafe archive base name %q", stem)
+				return nil, "", fmt.Errorf("%w: archive base name %q", ErrUnsafeEntry, stem)
 			}
 			base = filepath.Join(workingDir, stem)
 			syntheticDefault = true
@@ -127,7 +132,7 @@ func planEntries(
 		}
 	}
 
-	plans = make([]plannedEntry, 0, len(entries))
+	plans = make([]Plan, 0, len(entries))
 	for i, entry := range entries {
 		if rootMarkers[i] {
 			continue
@@ -143,12 +148,12 @@ func planEntries(
 		destination := filepath.Join(absBase, filepath.FromSlash(relativeName))
 		resolvedDestination, err := resolveExistingPath(destination)
 		if err != nil {
-			return nil, "", fmt.Errorf("unsafe archive entry %q: resolve destination: %w", entry.Name, err)
+			return nil, "", fmt.Errorf("%w: %q: resolve destination: %w", ErrUnsafeEntry, entry.Name, err)
 		}
 		if err := requireWithin(resolvedBase, resolvedDestination); err != nil {
-			return nil, "", fmt.Errorf("unsafe archive entry %q: %w", entry.Name, err)
+			return nil, "", fmt.Errorf("%w: %q: %w", ErrUnsafeEntry, entry.Name, err)
 		}
-		plans = append(plans, plannedEntry{
+		plans = append(plans, Plan{
 			Entry:        entry,
 			ArchiveName:  names[i],
 			RelativeName: filepath.FromSlash(relativeName),
@@ -178,7 +183,7 @@ func isDriveRootPath(name string) bool {
 	return len(name) >= 3 && name[1] == ':' && name[2] == '/'
 }
 
-func rejectFileTopLevelAncestors(names []string, entries []archiveEntry) error {
+func rejectFileTopLevelAncestors(names []string, entries []Entry) error {
 	var (
 		topLevelFiles    map[string]int
 		firstDescendants map[string]int
@@ -186,7 +191,7 @@ func rejectFileTopLevelAncestors(names []string, entries []archiveEntry) error {
 
 	topLevelFiles = make(map[string]int)
 	for i, name := range names {
-		if entries[i].Kind != entryFile || strings.Contains(name, "/") {
+		if entries[i].Kind != EntryFile || strings.Contains(name, "/") {
 			continue
 		}
 		if _, exists := topLevelFiles[name]; !exists {
@@ -218,12 +223,12 @@ func rejectFileTopLevelAncestors(names []string, entries []archiveEntry) error {
 	return nil
 }
 
-func rejectSymlinkAncestors(names []string, entries []archiveEntry) error {
+func rejectSymlinkAncestors(names []string, entries []Entry) error {
 	var symlinkNames map[string]int
 
 	symlinkNames = make(map[string]int)
 	for i, entry := range entries {
-		if entry.Kind == entrySymlink {
+		if entry.Kind == EntrySymlink {
 			symlinkNames[names[i]] = i
 		}
 	}
@@ -263,9 +268,9 @@ func validateSymlinkTarget(name string, target string) error {
 	return nil
 }
 
-func isTopLevelDirectory(top string, names []string, entries []archiveEntry) bool {
+func isTopLevelDirectory(top string, names []string, entries []Entry) bool {
 	for i, name := range names {
-		if name == top && entries[i].Kind == entryDirectory {
+		if name == top && entries[i].Kind == EntryDirectory {
 			return true
 		}
 		if strings.HasPrefix(name, top+"/") {

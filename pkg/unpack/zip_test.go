@@ -47,9 +47,9 @@ func TestScanZIPClassifiesEntriesAndRecordsSourceIndex(t *testing.T) {
 	})
 
 	entries, err := scanZIP(path, false)
-	want := []archiveEntry{
-		{Name: "notes.txt", Kind: entryFile, Mode: 0o640, SourceIndex: 0},
-		{Name: "docs/", Kind: entryDirectory, Mode: 0o750, SourceIndex: 1},
+	want := []Entry{
+		{Name: "notes.txt", Kind: EntryFile, Mode: 0o640, SourceIndex: 0},
+		{Name: "docs/", Kind: EntryDirectory, Mode: 0o750, SourceIndex: 1},
 	}
 	if err != nil || len(entries) != len(want) {
 		t.Fatalf("scanZIP() = %#v, %v", entries, err)
@@ -87,8 +87,12 @@ func TestScanZIPRejectsEncryptedEntry(t *testing.T) {
 	writeZIPFixture(t, path, []zipFixture{{Name: "secret.txt", Body: "secret"}})
 	patchZIPEncrypted(t, path)
 
-	if _, err := scanZIP(path, false); err == nil {
+	_, err := scanZIP(path, false)
+	if err == nil {
 		t.Fatal("scanZIP() accepted an encrypted entry")
+	}
+	if !errors.Is(err, ErrUnsafeEntry) {
+		t.Fatalf("scanZIP() error = %v, want ErrUnsafeEntry", err)
 	}
 }
 
@@ -104,7 +108,7 @@ func TestScanZIPClassifiesSymlinkEntry(t *testing.T) {
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("scanZIP() = %#v, %v", entries, err)
 	}
-	if entries[0].Kind != entrySymlink || entries[0].LinkTarget != "target" {
+	if entries[0].Kind != EntrySymlink || entries[0].LinkTarget != "target" {
 		t.Fatalf("entry = %#v, want symlink with LinkTarget %q", entries[0], "target")
 	}
 }
@@ -130,7 +134,7 @@ func TestExtractZIPWritesPlannedFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	plans, _, err := planEntries(entries, path, filepath.Join(root, "out"), root, formatZIP)
+	plans, _, err := PlanEntries(entries, path, filepath.Join(root, "out"), root, FormatZIP)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +163,7 @@ func TestExtractZIPSkipsExistingFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	plans, _, err := planEntries(entries, path, filepath.Join(root, "out"), root, formatZIP)
+	plans, _, err := PlanEntries(entries, path, filepath.Join(root, "out"), root, FormatZIP)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +238,7 @@ func TestExtractZIPDefersRestrictiveDirectoryModes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			plans, _, err := planEntries(entries, archivePath, "", root, formatZIP)
+			plans, _, err := PlanEntries(entries, archivePath, "", root, FormatZIP)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -262,7 +266,7 @@ func TestExtractZIPDoesNotChmodPreExistingDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	plans, _, err := planEntries(entries, archivePath, "", root, formatZIP)
+	plans, _, err := PlanEntries(entries, archivePath, "", root, FormatZIP)
 	if err != nil {
 		t.Fatal(err)
 	}

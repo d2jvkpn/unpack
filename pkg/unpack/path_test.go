@@ -13,26 +13,26 @@ func TestPlanEntriesSelectsDestination(t *testing.T) {
 	root := t.TempDir()
 	tests := []struct {
 		name         string
-		entries      []archiveEntry
+		entries      []Entry
 		output       string
 		wantBase     string
 		wantRelative string
 	}{
-		{"default single", []archiveEntry{{Name: "one/file.txt", Kind: entryFile}}, "",
+		{"default single", []Entry{{Name: "one/file.txt", Kind: EntryFile}}, "",
 			root, "one/file.txt"},
-		{"default multiple", []archiveEntry{{Name: "a.txt", Kind: entryFile},
-			{Name: "dir/b.txt", Kind: entryFile}}, "", filepath.Join(root, "bundle"), "a.txt"},
-		{"explicit strips wrapper", []archiveEntry{{Name: "one/file.txt", Kind: entryFile}},
+		{"default multiple", []Entry{{Name: "a.txt", Kind: EntryFile},
+			{Name: "dir/b.txt", Kind: EntryFile}}, "", filepath.Join(root, "bundle"), "a.txt"},
+		{"explicit strips wrapper", []Entry{{Name: "one/file.txt", Kind: EntryFile}},
 			filepath.Join(root, "out"), filepath.Join(root, "out"), "file.txt"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plans, base, err := planEntries(
+			plans, base, err := PlanEntries(
 				tt.entries,
 				filepath.Join(root, "bundle.tar.gz"),
 				tt.output,
 				root,
-				formatTarGzip,
+				FormatTarGzip,
 			)
 			if err != nil || base != tt.wantBase || plans[0].RelativeName != tt.wantRelative {
 				t.Fatalf("plan = %#v, %q, %v", plans, base, err)
@@ -43,15 +43,15 @@ func TestPlanEntriesSelectsDestination(t *testing.T) {
 
 func TestPlanEntriesTracksTopLevelDirIndependentlyOfOnDiskStripping(t *testing.T) {
 	root := t.TempDir()
-	entries := []archiveEntry{
-		{Name: "myproj/src/main.go", Kind: entryFile},
-		{Name: "myproj/README.md", Kind: entryFile},
+	entries := []Entry{
+		{Name: "myproj/src/main.go", Kind: EntryFile},
+		{Name: "myproj/README.md", Kind: EntryFile},
 	}
 
 	t.Run("no output dir: on-disk path keeps wrapper, match name does not", func(t *testing.T) {
-		plans, _, err := planEntries(entries, filepath.Join(root, "bundle.zip"), "", root, formatZIP)
+		plans, _, err := PlanEntries(entries, filepath.Join(root, "bundle.zip"), "", root, FormatZIP)
 		if err != nil {
-			t.Fatalf("planEntries() error = %v", err)
+			t.Fatalf("PlanEntries() error = %v", err)
 		}
 		if plans[0].ArchiveName != "myproj/src/main.go" || plans[0].TopLevelDir != "myproj" {
 			t.Fatalf("plans[0] = %#v", plans[0])
@@ -63,9 +63,9 @@ func TestPlanEntriesTracksTopLevelDirIndependentlyOfOnDiskStripping(t *testing.T
 
 	t.Run("explicit output dir: on-disk path strips wrapper, match name unaffected", func(t *testing.T) {
 		output := filepath.Join(root, "out")
-		plans, _, err := planEntries(entries, filepath.Join(root, "bundle.zip"), output, root, formatZIP)
+		plans, _, err := PlanEntries(entries, filepath.Join(root, "bundle.zip"), output, root, FormatZIP)
 		if err != nil {
-			t.Fatalf("planEntries() error = %v", err)
+			t.Fatalf("PlanEntries() error = %v", err)
 		}
 		if plans[0].ArchiveName != "myproj/src/main.go" || plans[0].TopLevelDir != "myproj" {
 			t.Fatalf("plans[0] = %#v", plans[0])
@@ -78,14 +78,14 @@ func TestPlanEntriesTracksTopLevelDirIndependentlyOfOnDiskStripping(t *testing.T
 
 func TestPlanEntriesLeavesTopLevelDirEmptyForMultipleTopLevelEntries(t *testing.T) {
 	root := t.TempDir()
-	entries := []archiveEntry{
-		{Name: "a.txt", Kind: entryFile},
-		{Name: "dir/b.txt", Kind: entryFile},
+	entries := []Entry{
+		{Name: "a.txt", Kind: EntryFile},
+		{Name: "dir/b.txt", Kind: EntryFile},
 	}
 
-	plans, _, err := planEntries(entries, filepath.Join(root, "bundle.zip"), "", root, formatZIP)
+	plans, _, err := PlanEntries(entries, filepath.Join(root, "bundle.zip"), "", root, FormatZIP)
 	if err != nil {
-		t.Fatalf("planEntries() error = %v", err)
+		t.Fatalf("PlanEntries() error = %v", err)
 	}
 	for _, plan := range plans {
 		if plan.TopLevelDir != "" {
@@ -97,19 +97,22 @@ func TestPlanEntriesLeavesTopLevelDirEmptyForMultipleTopLevelEntries(t *testing.
 func TestPlanEntriesRejectsTraversal(t *testing.T) {
 	root := t.TempDir()
 	for _, name := range []string{"../escape", "/absolute"} {
-		_, _, err := planEntries(
-			[]archiveEntry{{Name: name, Kind: entryFile}}, "bundle.zip", root, root, formatZIP,
+		_, _, err := PlanEntries(
+			[]Entry{{Name: name, Kind: EntryFile}}, "bundle.zip", root, root, FormatZIP,
 		)
 		if err == nil {
 			t.Fatalf("unsafe name %q succeeded", name)
+		}
+		if !errors.Is(err, ErrUnsafeEntry) {
+			t.Fatalf("PlanEntries(%q) error = %v, want ErrUnsafeEntry", name, err)
 		}
 	}
 }
 
 func TestPlanEntriesRejectsRootMarkerFile(t *testing.T) {
 	root := t.TempDir()
-	_, _, err := planEntries(
-		[]archiveEntry{{Name: ".", Kind: entryFile}}, "bundle.zip", root, root, formatZIP,
+	_, _, err := PlanEntries(
+		[]Entry{{Name: ".", Kind: EntryFile}}, "bundle.zip", root, root, FormatZIP,
 	)
 	if err == nil {
 		t.Fatal("regular-file root marker succeeded")
@@ -119,8 +122,8 @@ func TestPlanEntriesRejectsRootMarkerFile(t *testing.T) {
 func TestPlanEntriesRejectsWindowsDriveAbsolute(t *testing.T) {
 	root := t.TempDir()
 	for _, name := range []string{"C:/escape", "C:\\escape"} {
-		_, _, err := planEntries(
-			[]archiveEntry{{Name: name, Kind: entryFile}}, "bundle.zip", root, root, formatZIP,
+		_, _, err := PlanEntries(
+			[]Entry{{Name: name, Kind: EntryFile}}, "bundle.zip", root, root, FormatZIP,
 		)
 		if err == nil {
 			t.Fatalf("unsafe Windows drive path %q succeeded", name)
@@ -130,9 +133,9 @@ func TestPlanEntriesRejectsWindowsDriveAbsolute(t *testing.T) {
 
 func TestPlanEntriesRejectsUnknownEntryKind(t *testing.T) {
 	root := t.TempDir()
-	for _, kind := range []entryKind{0, entryKind(99)} {
-		_, _, err := planEntries(
-			[]archiveEntry{{Name: "file.txt", Kind: kind}}, "bundle.zip", root, root, formatZIP,
+	for _, kind := range []EntryKind{0, EntryKind(99)} {
+		_, _, err := PlanEntries(
+			[]Entry{{Name: "file.txt", Kind: kind}}, "bundle.zip", root, root, FormatZIP,
 		)
 		if err == nil {
 			t.Fatalf("unknown entry kind %d succeeded", kind)
@@ -142,9 +145,9 @@ func TestPlanEntriesRejectsUnknownEntryKind(t *testing.T) {
 
 func TestPlanEntriesRejectsFileDirectoryConflict(t *testing.T) {
 	root := t.TempDir()
-	_, _, err := planEntries(
-		[]archiveEntry{{Name: "one", Kind: entryFile}, {Name: "one/child.txt", Kind: entryFile}},
-		"bundle.zip", filepath.Join(root, "out"), root, formatZIP,
+	_, _, err := PlanEntries(
+		[]Entry{{Name: "one", Kind: EntryFile}, {Name: "one/child.txt", Kind: EntryFile}},
+		"bundle.zip", filepath.Join(root, "out"), root, FormatZIP,
 	)
 	if err == nil {
 		t.Fatal("file entry with descendants succeeded")
@@ -153,17 +156,17 @@ func TestPlanEntriesRejectsFileDirectoryConflict(t *testing.T) {
 
 func TestPlanEntriesAcceptsSafeSymlink(t *testing.T) {
 	root := t.TempDir()
-	plans, _, err := planEntries(
-		[]archiveEntry{
-			{Name: "lib/libfoo.so.1", Kind: entryFile},
-			{Name: "lib/libfoo.so", Kind: entrySymlink, LinkTarget: "libfoo.so.1"},
+	plans, _, err := PlanEntries(
+		[]Entry{
+			{Name: "lib/libfoo.so.1", Kind: EntryFile},
+			{Name: "lib/libfoo.so", Kind: EntrySymlink, LinkTarget: "libfoo.so.1"},
 		},
-		"bundle.zip", filepath.Join(root, "out"), root, formatZIP,
+		"bundle.zip", filepath.Join(root, "out"), root, FormatZIP,
 	)
 	if err != nil {
-		t.Fatalf("planEntries() error = %v", err)
+		t.Fatalf("PlanEntries() error = %v", err)
 	}
-	if plans[1].Entry.Kind != entrySymlink || plans[1].Entry.LinkTarget != "libfoo.so.1" {
+	if plans[1].Entry.Kind != EntrySymlink || plans[1].Entry.LinkTarget != "libfoo.so.1" {
 		t.Fatalf("plans[1] = %#v", plans[1])
 	}
 }
@@ -171,27 +174,33 @@ func TestPlanEntriesAcceptsSafeSymlink(t *testing.T) {
 func TestPlanEntriesRejectsSymlinkTargetEscape(t *testing.T) {
 	root := t.TempDir()
 	for _, target := range []string{"../../etc/passwd", "/etc/passwd", ""} {
-		_, _, err := planEntries(
-			[]archiveEntry{{Name: "linked", Kind: entrySymlink, LinkTarget: target}},
-			"bundle.zip", filepath.Join(root, "out"), root, formatZIP,
+		_, _, err := PlanEntries(
+			[]Entry{{Name: "linked", Kind: EntrySymlink, LinkTarget: target}},
+			"bundle.zip", filepath.Join(root, "out"), root, FormatZIP,
 		)
 		if err == nil {
 			t.Fatalf("unsafe symlink target %q succeeded", target)
+		}
+		if !errors.Is(err, ErrUnsafeEntry) {
+			t.Fatalf("PlanEntries(%q) error = %v, want ErrUnsafeEntry", target, err)
 		}
 	}
 }
 
 func TestPlanEntriesRejectsSymlinkAncestor(t *testing.T) {
 	root := t.TempDir()
-	_, _, err := planEntries(
-		[]archiveEntry{
-			{Name: "linked", Kind: entrySymlink, LinkTarget: "outside"},
-			{Name: "linked/escape.txt", Kind: entryFile},
+	_, _, err := PlanEntries(
+		[]Entry{
+			{Name: "linked", Kind: EntrySymlink, LinkTarget: "outside"},
+			{Name: "linked/escape.txt", Kind: EntryFile},
 		},
-		"bundle.zip", filepath.Join(root, "out"), root, formatZIP,
+		"bundle.zip", filepath.Join(root, "out"), root, FormatZIP,
 	)
 	if err == nil {
 		t.Fatal("entry nested under a symlink succeeded")
+	}
+	if !errors.Is(err, ErrUnsafeEntry) {
+		t.Fatalf("PlanEntries() error = %v, want ErrUnsafeEntry", err)
 	}
 }
 
@@ -206,27 +215,30 @@ func TestPlanEntriesRejectsExistingSymlinkEscape(t *testing.T) {
 		t.Skipf("cannot create symlink: %v", err)
 	}
 
-	_, _, err := planEntries(
-		[]archiveEntry{{Name: "safe.txt", Kind: entryFile}, {Name: "linked/escape.txt", Kind: entryFile}},
-		"bundle.zip", base, root, formatZIP,
+	_, _, err := PlanEntries(
+		[]Entry{{Name: "safe.txt", Kind: EntryFile}, {Name: "linked/escape.txt", Kind: EntryFile}},
+		"bundle.zip", base, root, FormatZIP,
 	)
 	if err == nil {
 		t.Fatal("entry through pre-existing symlink succeeded")
+	}
+	if !errors.Is(err, ErrUnsafeEntry) {
+		t.Fatalf("PlanEntries() error = %v, want ErrUnsafeEntry", err)
 	}
 }
 
 func TestPlanEntriesDoesNotCreateDirectoriesBeforeValidation(t *testing.T) {
 	root := t.TempDir()
 	base := filepath.Join(root, "new-output")
-	_, _, err := planEntries(
-		[]archiveEntry{{Name: "safe.txt", Kind: entryFile}, {Name: "../escape", Kind: entryFile}},
-		"bundle.zip", base, root, formatZIP,
+	_, _, err := PlanEntries(
+		[]Entry{{Name: "safe.txt", Kind: EntryFile}, {Name: "../escape", Kind: EntryFile}},
+		"bundle.zip", base, root, FormatZIP,
 	)
 	if err == nil {
 		t.Fatal("unsafe plan succeeded")
 	}
 	if _, statErr := os.Stat(base); !errors.Is(statErr, fs.ErrNotExist) {
-		t.Fatalf("planEntries created base: %v", statErr)
+		t.Fatalf("PlanEntries created base: %v", statErr)
 	}
 }
 

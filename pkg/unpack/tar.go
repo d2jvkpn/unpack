@@ -12,7 +12,7 @@ import (
 	"unicode/utf8"
 )
 
-func openTAR(path string, format archiveFormat) (*tar.Reader, func() error, error) {
+func openTAR(path string, format Format) (*tar.Reader, func() error, error) {
 	var (
 		file         *os.File
 		reader       io.Reader
@@ -28,8 +28,8 @@ func openTAR(path string, format archiveFormat) (*tar.Reader, func() error, erro
 
 	reader = file
 	switch format {
-	case formatTAR:
-	case formatTarGzip:
+	case FormatTAR:
+	case FormatTarGzip:
 		gzipReader, err = gzip.NewReader(file)
 		if err != nil {
 			return nil, nil, errors.Join(fmt.Errorf("open gzip TAR archive %q: %w", path, err), file.Close())
@@ -57,7 +57,7 @@ func openTAR(path string, format archiveFormat) (*tar.Reader, func() error, erro
 	return tar.NewReader(reader), closeArchive, nil
 }
 
-func scanTAR(path string, format archiveFormat, chinese bool) (entries []archiveEntry, err error) {
+func scanTAR(path string, format Format, chinese bool) (entries []Entry, err error) {
 	var (
 		reader       *tar.Reader
 		closeArchive func() error
@@ -82,23 +82,23 @@ func scanTAR(path string, format archiveFormat, chinese bool) (entries []archive
 
 		name, decodeErr := decodeArchiveName(header.Name, chinese, !utf8.ValidString(header.Name))
 		if decodeErr != nil {
-			return nil, fmt.Errorf("decode TAR entry %q: %w", header.Name, decodeErr)
+			return nil, fmt.Errorf("%w: decode TAR entry %q: %w", ErrUnsafeEntry, header.Name, decodeErr)
 		}
 
-		kind := entryKind(0)
+		kind := EntryKind(0)
 		var linkTarget string
 		switch header.Typeflag {
 		case tar.TypeReg, tar.TypeRegA:
-			kind = entryFile
+			kind = EntryFile
 		case tar.TypeDir:
-			kind = entryDirectory
+			kind = EntryDirectory
 		case tar.TypeSymlink:
-			kind = entrySymlink
+			kind = EntrySymlink
 			linkTarget = header.Linkname
 		default:
-			return nil, fmt.Errorf("unsafe TAR entry %q: unsupported type %q", name, header.Typeflag)
+			return nil, fmt.Errorf("%w: %q: unsupported type %q", ErrUnsafeEntry, name, header.Typeflag)
 		}
-		entries = append(entries, archiveEntry{
+		entries = append(entries, Entry{
 			Name:        name,
 			Kind:        kind,
 			Mode:        fs.FileMode(header.Mode).Perm(),
@@ -110,8 +110,8 @@ func scanTAR(path string, format archiveFormat, chinese bool) (entries []archive
 
 func extractTAR(
 	path string,
-	format archiveFormat,
-	plans []plannedEntry,
+	format Format,
+	plans []Plan,
 	overwrite bool,
 ) (skippedEntries []string, err error) {
 	var (
@@ -134,7 +134,7 @@ func extractTAR(
 			return nil, fmt.Errorf("TAR entry %q has invalid source index %d", plan.Entry.Name, plan.Entry.SourceIndex)
 		}
 		switch plan.Entry.Kind {
-		case entryFile, entryDirectory, entrySymlink:
+		case EntryFile, EntryDirectory, EntrySymlink:
 		default:
 			return nil, fmt.Errorf("TAR entry %q has unsupported entry kind %d", plan.Entry.Name, plan.Entry.Kind)
 		}
@@ -166,12 +166,12 @@ func extractTAR(
 		}
 
 		switch plan.Entry.Kind {
-		case entryDirectory:
+		case EntryDirectory:
 			if mkdirErr := directories.ensure(plan.Destination); mkdirErr != nil {
 				return skippedEntries, fmt.Errorf("create directory for TAR entry %q: %w", plan.Entry.Name, mkdirErr)
 			}
 			directories.recordMode(plan.Destination, plan.Entry.Mode)
-		case entryFile:
+		case EntryFile:
 			if mkdirErr := directories.ensure(filepath.Dir(plan.Destination)); mkdirErr != nil {
 				return skippedEntries, fmt.Errorf("create parent directories for TAR entry %q: %w", plan.Entry.Name, mkdirErr)
 			}
@@ -187,7 +187,7 @@ func extractTAR(
 			if skipped {
 				skippedEntries = append(skippedEntries, plan.RelativeName)
 			}
-		case entrySymlink:
+		case EntrySymlink:
 			if mkdirErr := directories.ensure(filepath.Dir(plan.Destination)); mkdirErr != nil {
 				return skippedEntries, fmt.Errorf("create parent directories for TAR entry %q: %w", plan.Entry.Name, mkdirErr)
 			}

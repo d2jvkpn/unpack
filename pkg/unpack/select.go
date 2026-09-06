@@ -74,14 +74,17 @@ func globToRegexp(pattern string) (*regexp.Regexp, error) {
 	return regexp.Compile(builder.String())
 }
 
-func filterPlans(plans []plannedEntry, selectors []string) ([]plannedEntry, error) {
+// FilterPlans restricts plans to those matching at least one selector (exact path, directory
+// prefix, or glob — see selectorMatches). It returns ErrNoMatch, wrapped with the offending
+// selector, if any selector matches nothing.
+func FilterPlans(plans []Plan, selectors []string) ([]Plan, error) {
 	var (
 		matched  []bool
-		filtered []plannedEntry
+		filtered []Plan
 	)
 
 	matched = make([]bool, len(selectors))
-	filtered = make([]plannedEntry, 0, len(plans))
+	filtered = make([]Plan, 0, len(plans))
 	for _, plan := range plans {
 		name := archiveMatchName(plan)
 		for i, selector := range selectors {
@@ -94,13 +97,13 @@ func filterPlans(plans []plannedEntry, selectors []string) ([]plannedEntry, erro
 	}
 	for i, selector := range selectors {
 		if !matched[i] {
-			return nil, fmt.Errorf("selector %q matched no entries", selector)
+			return nil, fmt.Errorf("%w: %q", ErrNoMatch, selector)
 		}
 	}
 	return filtered, nil
 }
 
-func archiveMatchName(plan plannedEntry) string {
+func archiveMatchName(plan Plan) string {
 	if plan.TopLevelDir != "" && strings.HasPrefix(plan.ArchiveName, plan.TopLevelDir+"/") {
 		return strings.TrimPrefix(plan.ArchiveName, plan.TopLevelDir+"/")
 	}

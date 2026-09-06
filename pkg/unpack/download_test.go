@@ -24,8 +24,8 @@ func TestIsRemoteURL(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.candidate, func(t *testing.T) {
-			if got := isRemoteURL(tt.candidate); got != tt.want {
-				t.Fatalf("isRemoteURL(%q) = %v, want %v", tt.candidate, got, tt.want)
+			if got := IsRemoteURL(tt.candidate); got != tt.want {
+				t.Fatalf("IsRemoteURL(%q) = %v, want %v", tt.candidate, got, tt.want)
 			}
 		})
 	}
