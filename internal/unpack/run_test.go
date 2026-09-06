@@ -22,9 +22,9 @@ func TestRunShowsHelpAndParsesSupportedFlags(t *testing.T) {
 			t.Fatalf("Run(--help) status = %d, stderr = %q", status, stderr.String())
 		}
 		for _, text := range []string{
-			"unpack [--cn] [--output-dir DIR] [--overwrite] [--version] ARCHIVE [FILE...]",
+			"unpack [--cn] [--directory DIR] [--overwrite] [--version] ARCHIVE [FILE...]",
 			"--cn",
-			"--output-dir DIR",
+			"--directory, -d DIR",
 		} {
 			if !strings.Contains(stderr.String(), text) {
 				t.Errorf("help output %q does not contain %q", stderr.String(), text)
@@ -41,7 +41,7 @@ func TestRunShowsHelpAndParsesSupportedFlags(t *testing.T) {
 		var stdout, stderr bytes.Buffer
 
 		status := Run(
-			[]string{"--cn", "--output-dir", outputDir, archivePath},
+			[]string{"--cn", "--directory", outputDir, archivePath},
 			&stdout,
 			&stderr,
 			filepath.Join(root, "working"),
@@ -61,7 +61,7 @@ func TestRunRequiresAtLeastOneArchive(t *testing.T) {
 	if status != 2 {
 		t.Fatalf("Run() status = %d, want 2", status)
 	}
-	wantUsage := "Usage: unpack [--cn] [--output-dir DIR] [--overwrite] [--version] ARCHIVE [FILE...]"
+	wantUsage := "Usage: unpack [--cn] [--directory DIR] [--overwrite] [--version] ARCHIVE [FILE...]"
 	if !strings.Contains(stderr.String(), wantUsage) {
 		t.Fatalf("stderr = %q, want usage", stderr.String())
 	}
@@ -264,7 +264,7 @@ func TestRunAcceptsRootDirectoryMarkers(t *testing.T) {
 			outputDir := filepath.Join(root, "output")
 			var stdout, stderr bytes.Buffer
 
-			status := Run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
+			status := Run([]string{"--directory", outputDir, archivePath}, &stdout, &stderr, root)
 
 			if status != 0 {
 				t.Fatalf("Run() status = %d, stderr = %q", status, stderr.String())
@@ -284,7 +284,7 @@ func TestRunExplicitOutputStripsSoleTopLevelDirectory(t *testing.T) {
 	outputDir := filepath.Join(root, "output")
 	var stdout, stderr bytes.Buffer
 
-	status := Run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
+	status := Run([]string{"--directory", outputDir, archivePath}, &stdout, &stderr, root)
 
 	if status != 0 {
 		t.Fatalf("Run() status = %d, stderr = %q", status, stderr.String())
@@ -326,14 +326,14 @@ func TestRunRejectsSingleDashLongOptionsWithoutWriting(t *testing.T) {
 		{
 			name: "output directory separate value",
 			args: func(root string, archivePath string) []string {
-				return []string{"-output-dir", filepath.Join(root, "output"), archivePath}
+				return []string{"-directory", filepath.Join(root, "output"), archivePath}
 			},
 			writtenPath: func(root string) string { return filepath.Join(root, "output", "note.txt") },
 		},
 		{
 			name: "output directory equals value",
 			args: func(root string, archivePath string) []string {
-				return []string{"-output-dir=" + filepath.Join(root, "output"), archivePath}
+				return []string{"-directory=" + filepath.Join(root, "output"), archivePath}
 			},
 			writtenPath: func(root string) string { return filepath.Join(root, "output", "note.txt") },
 		},
@@ -369,7 +369,7 @@ func TestRunAcceptsDashPrefixedOutputDirectoryOperand(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 
 	status := Run(
-		[]string{"--output-dir", "-destination", archivePath},
+		[]string{"--directory", "-destination", archivePath},
 		&stdout,
 		&stderr,
 		workingDir,
@@ -425,7 +425,7 @@ func TestRunExtractsBothSupportedFormats(t *testing.T) {
 		{tgzPath, "tgz.txt", "tgz"},
 	} {
 		var stdout, stderr bytes.Buffer
-		status := Run([]string{"--output-dir", outputDir, tt.archivePath}, &stdout, &stderr, root)
+		status := Run([]string{"--directory", outputDir, tt.archivePath}, &stdout, &stderr, root)
 		if status != 0 {
 			t.Fatalf("Run() status = %d, stderr = %q", status, stderr.String())
 		}
@@ -450,7 +450,7 @@ func TestRunDownloadsArchiveFromURL(t *testing.T) {
 	outputDir := filepath.Join(root, "output")
 	var stdout, stderr bytes.Buffer
 
-	status := Run([]string{"--output-dir", outputDir, server.URL + "/bundle.zip"}, &stdout, &stderr, root)
+	status := Run([]string{"--directory", outputDir, server.URL + "/bundle.zip"}, &stdout, &stderr, root)
 
 	if status != 0 {
 		t.Fatalf("Run() status = %d, stderr = %q", status, stderr.String())
@@ -467,7 +467,7 @@ func TestRunReportsErrorForMissingArchive(t *testing.T) {
 	outputDir := filepath.Join(root, "output")
 	var stdout, stderr bytes.Buffer
 
-	status := Run([]string{"--output-dir", outputDir, missingPath}, &stdout, &stderr, root)
+	status := Run([]string{"--directory", outputDir, missingPath}, &stdout, &stderr, root)
 
 	if status != 1 {
 		t.Fatalf("Run() status = %d, want 1; stderr = %q", status, stderr.String())
@@ -488,7 +488,7 @@ func TestRunExtractsOnlySelectedFiles(t *testing.T) {
 	outputDir := filepath.Join(root, "output")
 	var stdout, stderr bytes.Buffer
 
-	status := Run([]string{"--output-dir", outputDir, archivePath, "first.txt", "docs"}, &stdout, &stderr, root)
+	status := Run([]string{"--directory", outputDir, archivePath, "first.txt", "docs"}, &stdout, &stderr, root)
 
 	if status != 0 {
 		t.Fatalf("Run() status = %d, stderr = %q", status, stderr.String())
@@ -527,7 +527,7 @@ func TestRunFailsWithoutWritingWhenSelectorMatchesNothing(t *testing.T) {
 	outputDir := filepath.Join(root, "output")
 	var stdout, stderr bytes.Buffer
 
-	status := Run([]string{"--output-dir", outputDir, archivePath, "missing.txt"}, &stdout, &stderr, root)
+	status := Run([]string{"--directory", outputDir, archivePath, "missing.txt"}, &stdout, &stderr, root)
 
 	if status != 1 {
 		t.Fatalf("Run() status = %d, want 1; stderr = %q", status, stderr.String())
@@ -547,7 +547,7 @@ func TestRunTreatsTrailingArchivePathAsSelectorNotSecondArchive(t *testing.T) {
 	outputDir := filepath.Join(root, "output")
 	var stdout, stderr bytes.Buffer
 
-	status := Run([]string{"--output-dir", outputDir, firstPath, secondPath}, &stdout, &stderr, root)
+	status := Run([]string{"--directory", outputDir, firstPath, secondPath}, &stdout, &stderr, root)
 
 	if status != 1 {
 		t.Fatalf("Run() status = %d, want 1 (second.zip treated as a selector, not a second archive); stderr = %q",
@@ -568,7 +568,7 @@ func TestRunRejectsUnsafeArchivesBeforeWritingPayloads(t *testing.T) {
 		outputDir := filepath.Join(root, "output")
 		var stdout, stderr bytes.Buffer
 
-		status := Run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
+		status := Run([]string{"--directory", outputDir, archivePath}, &stdout, &stderr, root)
 
 		if status != 1 {
 			t.Fatalf("Run() status = %d, want 1; stderr = %q", status, stderr.String())
@@ -597,7 +597,7 @@ func TestRunRejectsUnsafeArchivesBeforeWritingPayloads(t *testing.T) {
 		}
 		var stdout, stderr bytes.Buffer
 
-		status := Run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
+		status := Run([]string{"--directory", outputDir, archivePath}, &stdout, &stderr, root)
 
 		if status != 1 {
 			t.Fatalf("Run() status = %d, want 1; stderr = %q", status, stderr.String())
@@ -616,7 +616,7 @@ func TestRunRejectsUnsafeArchivesBeforeWritingPayloads(t *testing.T) {
 		outputDir := filepath.Join(root, "output")
 		var stdout, stderr bytes.Buffer
 
-		status := Run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
+		status := Run([]string{"--directory", outputDir, archivePath}, &stdout, &stderr, root)
 
 		if status != 1 {
 			t.Fatalf("Run() status = %d, want 1; stderr = %q", status, stderr.String())
@@ -635,7 +635,7 @@ func TestRunRejectsUnsafeArchivesBeforeWritingPayloads(t *testing.T) {
 		outputDir := filepath.Join(root, "output")
 		var stdout, stderr bytes.Buffer
 
-		status := Run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
+		status := Run([]string{"--directory", outputDir, archivePath}, &stdout, &stderr, root)
 
 		if status != 1 {
 			t.Fatalf("Run() status = %d, want 1; stderr = %q", status, stderr.String())
@@ -654,7 +654,7 @@ func TestRunRejectsUnsafeArchivesBeforeWritingPayloads(t *testing.T) {
 		outputDir := filepath.Join(root, "output")
 		var stdout, stderr bytes.Buffer
 
-		status := Run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
+		status := Run([]string{"--directory", outputDir, archivePath}, &stdout, &stderr, root)
 
 		if status != 1 {
 			t.Fatalf("Run() status = %d, want 1; stderr = %q", status, stderr.String())
@@ -670,7 +670,7 @@ func TestRunRejectsUnsafeArchivesBeforeWritingPayloads(t *testing.T) {
 		outputDir := filepath.Join(root, "output")
 		var stdout, stderr bytes.Buffer
 
-		status := Run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
+		status := Run([]string{"--directory", outputDir, archivePath}, &stdout, &stderr, root)
 
 		if status != 1 {
 			t.Fatalf("Run() status = %d, want 1; stderr = %q", status, stderr.String())
@@ -690,7 +690,7 @@ func TestRunExtractsSafeSymlinks(t *testing.T) {
 		outputDir := filepath.Join(root, "output")
 		var stdout, stderr bytes.Buffer
 
-		status := Run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
+		status := Run([]string{"--directory", outputDir, archivePath}, &stdout, &stderr, root)
 
 		if status != 0 {
 			t.Fatalf("Run() status = %d, want 0; stderr = %q", status, stderr.String())
@@ -713,7 +713,7 @@ func TestRunExtractsSafeSymlinks(t *testing.T) {
 		outputDir := filepath.Join(root, "output")
 		var stdout, stderr bytes.Buffer
 
-		status := Run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
+		status := Run([]string{"--directory", outputDir, archivePath}, &stdout, &stderr, root)
 
 		if status != 0 {
 			t.Fatalf("Run() status = %d, want 0; stderr = %q", status, stderr.String())
@@ -740,7 +740,7 @@ func TestRunReportsProgressAndPreservesExistingFiles(t *testing.T) {
 	}
 	var stdout, stderr bytes.Buffer
 
-	status := Run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
+	status := Run([]string{"--directory", outputDir, archivePath}, &stdout, &stderr, root)
 
 	if status != 0 {
 		t.Fatalf("Run() status = %d, stderr = %q", status, stderr.String())
@@ -773,7 +773,7 @@ func TestRunReportsSkipsBeforeLaterExtractionFailure(t *testing.T) {
 	}}
 	var stderr bytes.Buffer
 
-	status := Run([]string{"--output-dir", outputDir, archivePath}, stdout, &stderr, root)
+	status := Run([]string{"--directory", outputDir, archivePath}, stdout, &stderr, root)
 
 	if stdout.triggerErr != nil {
 		t.Fatal(stdout.triggerErr)

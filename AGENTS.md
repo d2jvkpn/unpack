@@ -21,7 +21,7 @@ implementation and its tests. Design records are stored under `docs/records/supe
 - `gofmt -w .` formats Go source and tests before review.
 
 Go 1.27 or newer is required. Run the built binary with commands such as
-`./unpack --output-dir restored archive.tar.gz`.
+`./unpack --directory restored archive.tar.gz`.
 
 ## Coding Style & Naming Conventions
 

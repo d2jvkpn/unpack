@@ -1,7 +1,7 @@
 # unpack
 
 Extract ZIP, TAR, TAR.GZ, and TGZ archives with safe paths, a smart default destination, an
-overridable output directory (`--output-dir`), optional extraction of specific files, optional
+overridable output directory (`--directory`/`-d`), optional extraction of specific files, optional
 overwrite of existing files, and optional legacy Chinese filename decoding.
 
 <https://github.com/d2jvkpn/unpack>
@@ -38,7 +38,7 @@ You can also copy the binary produced by the build command to a directory on you
 ## Usage
 
 ```text
-unpack [--cn] [--output-dir DIR] [--overwrite] [--version] ARCHIVE [FILE...]
+unpack [--cn] [--directory DIR] [--overwrite] [--version] ARCHIVE [FILE...]
 ```
 
 Exactly one archive is required, given as a local path or an `http://`/`https://` URL. A URL is
@@ -52,7 +52,7 @@ used). Any arguments after the archive are file selectors (see
 The final status is zero on success, one when the archive fails to process (including a selector
 matching nothing or a download failure), and two for invalid command usage.
 
-`--output-dir` has no short `-o` alias. `--overwrite` and `--version` have no short aliases either.
+`--directory` has the short alias `-d`. `--overwrite` and `--version` have no short aliases.
 
 Before extracting each archive, `unpack` prints the archive path and the resolved output
 directory, for example:
@@ -84,24 +84,24 @@ which injects it via `-ldflags`. A plain `go build` invocation without that ldfl
 
 ## Output rules
 
-Without `--output-dir`, an archive containing one top-level item extracts directly into the current
+Without `--directory`, an archive containing one top-level item extracts directly into the current
 directory and retains that item's path. An archive containing multiple top-level items extracts
 into a directory named after the archive with its complete recognized suffix removed. For example,
 `a.tar.gz` extracts into `./a/`, not `./a.tar/`.
 
-With `--output-dir`, the archive extracts into the specified directory. When an archive contains
+With `--directory`, the archive extracts into the specified directory. When an archive contains
 one top-level directory, that wrapper directory is stripped: `wrapper/note.txt` becomes
 `DIR/note.txt`. A sole top-level file is not stripped, and multiple top-level items retain their
 paths.
 
-`--output-dir` is worth setting explicitly in two common cases where the smart default is not
+`--directory` is worth setting explicitly in two common cases where the smart default is not
 enough:
 
 - The archive has several loose top-level items and you don't want them scattered directly into
-  the current directory — pass `--output-dir` to collect everything under one directory you name.
+  the current directory — pass `--directory` to collect everything under one directory you name.
 - The archive is a release package whose filename encodes OS/arch (e.g.
   `myapp-linux-amd64.tar.gz`), where the smart default would otherwise create a directory named
-  after that full filename. Pass `--output-dir myapp` to land the contents in a short, predictable
+  after that full filename. Pass `--directory myapp` to land the contents in a short, predictable
   directory name instead of one that repeats the platform suffix.
 
 By default, existing files are never overwritten. Each preserved file is reported as
@@ -181,32 +181,32 @@ An explicit output directory, collecting loose top-level items instead of scatte
 current directory:
 
 ```sh
-unpack --output-dir restored photos.zip
+unpack -d restored photos.zip
 ```
 
 Extract only specific files from an archive:
 
 ```sh
-unpack --output-dir restored photos.zip vacation/beach.jpg vacation/sunset.jpg
+unpack -d restored photos.zip vacation/beach.jpg vacation/sunset.jpg
 ```
 
 A release package whose filename encodes OS/arch, extracted into a short, predictable directory
 name instead of one that repeats the platform suffix:
 
 ```sh
-unpack --output-dir myapp myapp-linux-amd64.tar.gz
+unpack -d myapp myapp-linux-amd64.tar.gz
 ```
 
 Both flags together:
 
 ```sh
-unpack --cn --output-dir restored old-photos.zip
+unpack --cn -d restored old-photos.zip
 ```
 
 Re-extract into a directory that already has files, replacing them:
 
 ```sh
-unpack --output-dir restored --overwrite photos.zip
+unpack -d restored --overwrite photos.zip
 ```
 
 Print version information:

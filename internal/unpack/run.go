@@ -24,13 +24,14 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workingDir string) i
 	flags = flag.NewFlagSet("unpack", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	flags.BoolVar(&chinese, "cn", false, "decode legacy Chinese filenames as GBK")
-	flags.StringVar(&outputDir, "output-dir", "", "extract into DIR")
+	flags.StringVar(&outputDir, "directory", "", "extract into DIR")
+	flags.StringVar(&outputDir, "d", "", "extract into DIR (shorthand for --directory)")
 	flags.BoolVar(&overwrite, "overwrite", false, "overwrite existing files and directories")
 	flags.BoolVar(&showVersion, "version", false, "print version information and exit")
 	flags.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: unpack [--cn] [--output-dir DIR] [--overwrite] [--version] ARCHIVE [FILE...]")
+		fmt.Fprintln(stderr, "Usage: unpack [--cn] [--directory DIR] [--overwrite] [--version] ARCHIVE [FILE...]")
 		fmt.Fprintln(stderr, "  --cn                 decode legacy Chinese filenames as GBK")
-		fmt.Fprintln(stderr, "  --output-dir DIR     extract into DIR")
+		fmt.Fprintln(stderr, "  --directory, -d DIR  extract into DIR")
 		fmt.Fprintln(stderr, "  --overwrite          overwrite existing files and directories")
 		fmt.Fprintln(stderr, "  --version            print version information and exit")
 		fmt.Fprintln(stderr)
@@ -156,7 +157,7 @@ func validateOptionSyntax(args []string) error {
 		if arg == "--" {
 			return nil
 		}
-		if arg == "--output-dir" {
+		if arg == "--directory" || arg == "-d" {
 			skipOperand = true
 			continue
 		}
