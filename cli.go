@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"path/filepath"
 	"strings"
 
 	"unpack/pkg/unpack"
@@ -13,14 +12,15 @@ import (
 
 func run(args []string, stdout io.Writer, stderr io.Writer, workingDir string) int {
 	var (
-		flags         *flag.FlagSet
-		chinese       bool
-		outputDir     string
-		overwrite     bool
-		showVersion   bool
-		extractionDir string
-		archivePath   string
-		selectors     []string
+		flags       *flag.FlagSet
+		chinese     bool
+		outputDir   string
+		overwrite   bool
+		showVersion bool
+		archivePath string
+		selectors   []string
+		result      unpack.Result
+		err         error
 	)
 
 	flags = flag.NewFlagSet("unpack", flag.ContinueOnError)
@@ -75,11 +75,6 @@ func run(args []string, stdout io.Writer, stderr io.Writer, workingDir string) i
 		flags.Usage()
 		return 2
 	}
-	extractionDir = outputDir
-	if extractionDir != "" && !filepath.IsAbs(extractionDir) {
-		extractionDir = filepath.Join(workingDir, extractionDir)
-	}
-
 	archivePath = flags.Args()[0]
 	if unpack.IsRemoteURL(archivePath) {
 		fmt.Fprintf(stdout, "Downloading: %s\n", archivePath)
@@ -93,17 +88,19 @@ func run(args []string, stdout io.Writer, stderr io.Writer, workingDir string) i
 	}
 	selectors = flags.Args()[1:]
 
-	fmt.Fprintf(stdout, "Extracting: %s\n", archivePath)
-	result, err := unpack.Extract(archivePath, unpack.Options{
-		Directory:  extractionDir,
+	result, err = unpack.Extract(archivePath, unpack.Options{
+		Directory:  outputDir,
 		WorkingDir: workingDir,
 		Chinese:    chinese,
 		Overwrite:  overwrite,
 		Selectors:  selectors,
 	})
-	fmt.Fprintf(stdout, "Output directory: %s\n", result.Directory)
-	for _, relativeName := range result.Skipped {
-		fmt.Fprintf(stdout, "Skipping existing file: %s\n", relativeName)
+	if result.Directory != "" {
+		fmt.Fprintf(stdout, "Extracting: %s\n", archivePath)
+		fmt.Fprintf(stdout, "Output directory: %s\n", result.Directory)
+		for _, relativeName := range result.Skipped {
+			fmt.Fprintf(stdout, "Skipping existing file: %s\n", relativeName)
+		}
 	}
 	if err != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
