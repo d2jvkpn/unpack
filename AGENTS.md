@@ -3,13 +3,18 @@
 ## Project Structure & Module Organization
 
 This repository contains a small Go command-line application for safely extracting ZIP, TAR,
-TAR.GZ, and TGZ archives. The root `main.go` is a thin entry point that only resolves the working
-directory and delegates to the `internal/unpack` package. Within `internal/unpack`, command
-orchestration and flag parsing live in `run.go`; archive format detection is in `archive.go`; ZIP
-and TAR handling are separated into `zip.go` and `tar.go`; path validation and extraction planning
-live in `path.go`; and filename decoding helpers are in `names.go`. Tests are colocated with their
-implementation as `*_test.go`. `unzip_cn.py` and `test_unzip_cn.py` provide the legacy Python
-implementation and its tests. Design records are stored under `docs/records/superpowers/`.
+TAR.GZ, and TGZ archives, built on top of `pkg/unpack`, a public library package any Go module can
+import. At the repository root (`package main`), `main.go` resolves the working directory and
+calls `run`; `cli.go` holds flag parsing, usage text, and CLI-level orchestration; `version.go`
+reports build/VCS metadata for `--version`. Within `pkg/unpack`, `extract.go` exposes the
+high-level `Extract` entry point; `archive.go` handles format detection and dispatch; `zip.go` and
+`tar.go` implement per-format scanning and writing; `path.go` validates destinations and builds
+extraction plans; `select.go` matches file selectors; `download.go` fetches archives from
+http(s) URLs; `names.go` decodes legacy Chinese filenames; and `errors.go` defines the sentinel
+errors (`ErrUnsupportedFormat`, `ErrNoMatch`, `ErrUnsafeEntry`) library callers can match with
+`errors.Is`. Tests are colocated with their implementation as `*_test.go`. `unzip_cn.py` and
+`test_unzip_cn.py` provide the legacy Python implementation and its tests. Design records are
+stored under `docs/records/superpowers/`.
 
 ## Build, Test, and Development Commands
 

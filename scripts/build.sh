@@ -11,7 +11,7 @@ BINARY="unpack"
 RELEASES_DIR="target/releases"
 
 BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-LDFLAGS="-X unpack/internal/unpack.buildTime=$BUILD_TIME"
+LDFLAGS="-X main.buildTime=$BUILD_TIME"
 
 mkdir -p "$RELEASES_DIR"
 

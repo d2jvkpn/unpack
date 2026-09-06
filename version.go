@@ -1,4 +1,4 @@
-package unpack
+package main
 
 import "runtime/debug"
 

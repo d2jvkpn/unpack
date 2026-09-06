@@ -1,4 +1,4 @@
-package unpack
+package main
 
 import (
 	"errors"
@@ -7,9 +7,11 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
+
+	"unpack/pkg/unpack"
 )
 
-func Run(args []string, stdout io.Writer, stderr io.Writer, workingDir string) int {
+func run(args []string, stdout io.Writer, stderr io.Writer, workingDir string) int {
 	var (
 		flags         *flag.FlagSet
 		chinese       bool
@@ -79,9 +81,9 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workingDir string) i
 	}
 
 	archivePath = flags.Args()[0]
-	if isRemoteURL(archivePath) {
+	if unpack.IsRemoteURL(archivePath) {
 		fmt.Fprintf(stdout, "Downloading: %s\n", archivePath)
-		localPath, cleanup, err := downloadArchive(archivePath)
+		localPath, cleanup, err := unpack.Download(archivePath)
 		if err != nil {
 			fmt.Fprintf(stderr, "Error: %v\n", err)
 			return 1
@@ -90,60 +92,24 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, workingDir string) i
 		archivePath = localPath
 	}
 	selectors = flags.Args()[1:]
-	if err := processArchive(archivePath, extractionDir, workingDir, chinese, overwrite, selectors, stdout); err != nil {
+
+	fmt.Fprintf(stdout, "Extracting: %s\n", archivePath)
+	result, err := unpack.Extract(archivePath, unpack.Options{
+		Directory:  extractionDir,
+		WorkingDir: workingDir,
+		Chinese:    chinese,
+		Overwrite:  overwrite,
+		Selectors:  selectors,
+	})
+	fmt.Fprintf(stdout, "Output directory: %s\n", result.Directory)
+	for _, relativeName := range result.Skipped {
+		fmt.Fprintf(stdout, "Skipping existing file: %s\n", relativeName)
+	}
+	if err != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 1
 	}
 	return 0
-}
-
-func processArchive(
-	archivePath string,
-	outputDir string,
-	workingDir string,
-	chinese bool,
-	overwrite bool,
-	selectors []string,
-	stdout io.Writer,
-) error {
-	var (
-		format       archiveFormat
-		entries      []archiveEntry
-		plans        []plannedEntry
-		resolvedBase string
-		skipped      []string
-		err          error
-	)
-
-	format, err = detectFormat(archivePath)
-	if err != nil {
-		return fmt.Errorf("process archive %q: %w", archivePath, err)
-	}
-	entries, err = scanArchive(archivePath, format, chinese)
-	if err != nil {
-		return err
-	}
-	plans, resolvedBase, err = planEntries(entries, archivePath, outputDir, workingDir, format)
-	if err != nil {
-		return fmt.Errorf("plan archive %q: %w", archivePath, err)
-	}
-	if len(selectors) > 0 {
-		plans, err = filterPlans(plans, selectors)
-		if err != nil {
-			return fmt.Errorf("select files in archive %q: %w", archivePath, err)
-		}
-	}
-
-	fmt.Fprintf(stdout, "Extracting: %s\n", archivePath)
-	fmt.Fprintf(stdout, "Output directory: %s\n", resolvedBase)
-	skipped, err = extractArchive(archivePath, format, plans, overwrite)
-	for _, relativeName := range skipped {
-		fmt.Fprintf(stdout, "Skipping existing file: %s\n", relativeName)
-	}
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 func validateOptionSyntax(args []string) error {
