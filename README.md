@@ -154,8 +154,14 @@ Every archive is fully scanned and its destinations are validated before any pay
 archive is written. Absolute paths, path traversal, and paths that escape through an existing
 symbolic-link component are rejected.
 
-Encrypted ZIP files are unsupported. Symbolic links, hard links, devices, FIFOs, sockets, and
-other special or unknown entries are rejected; only regular files and directories are extracted.
+Symbolic links are extracted only when their target is relative and stays within the extraction
+directory; absolute or `..`-escaping targets are rejected. A symlink entry may never be an
+ancestor path component of another entry, so an archive cannot use a link created from one entry
+to redirect where a later entry gets written.
+
+Encrypted ZIP files are unsupported. Hard links, devices, FIFOs, sockets, and other special or
+unknown entries are rejected; only regular files, directories, and safe symbolic links are
+extracted.
 
 ## Examples
 

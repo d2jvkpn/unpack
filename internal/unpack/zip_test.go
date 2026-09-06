@@ -92,7 +92,7 @@ func TestScanZIPRejectsEncryptedEntry(t *testing.T) {
 	}
 }
 
-func TestScanZIPRejectsSymlink(t *testing.T) {
+func TestScanZIPClassifiesSymlinkEntry(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "symlink.zip")
 	writeZIPFixture(t, path, []zipFixture{{
 		Name: "linked",
@@ -100,8 +100,12 @@ func TestScanZIPRejectsSymlink(t *testing.T) {
 		Mode: fs.ModeSymlink | 0o777,
 	}})
 
-	if _, err := scanZIP(path, false); err == nil {
-		t.Fatal("scanZIP() accepted a symbolic link")
+	entries, err := scanZIP(path, false)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("scanZIP() = %#v, %v", entries, err)
+	}
+	if entries[0].Kind != entrySymlink || entries[0].LinkTarget != "target" {
+		t.Fatalf("entry = %#v, want symlink with LinkTarget %q", entries[0], "target")
 	}
 }
 

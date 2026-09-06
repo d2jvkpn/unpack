@@ -20,12 +20,14 @@ type entryKind uint8
 const (
 	entryFile entryKind = iota + 1
 	entryDirectory
+	entrySymlink
 )
 
 type archiveEntry struct {
 	Name        string
 	Kind        entryKind
 	Mode        fs.FileMode
+	LinkTarget  string
 	SourceIndex int
 }
 

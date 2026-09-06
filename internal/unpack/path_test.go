@@ -151,6 +151,50 @@ func TestPlanEntriesRejectsFileDirectoryConflict(t *testing.T) {
 	}
 }
 
+func TestPlanEntriesAcceptsSafeSymlink(t *testing.T) {
+	root := t.TempDir()
+	plans, _, err := planEntries(
+		[]archiveEntry{
+			{Name: "lib/libfoo.so.1", Kind: entryFile},
+			{Name: "lib/libfoo.so", Kind: entrySymlink, LinkTarget: "libfoo.so.1"},
+		},
+		"bundle.zip", filepath.Join(root, "out"), root, formatZIP,
+	)
+	if err != nil {
+		t.Fatalf("planEntries() error = %v", err)
+	}
+	if plans[1].Entry.Kind != entrySymlink || plans[1].Entry.LinkTarget != "libfoo.so.1" {
+		t.Fatalf("plans[1] = %#v", plans[1])
+	}
+}
+
+func TestPlanEntriesRejectsSymlinkTargetEscape(t *testing.T) {
+	root := t.TempDir()
+	for _, target := range []string{"../../etc/passwd", "/etc/passwd", ""} {
+		_, _, err := planEntries(
+			[]archiveEntry{{Name: "linked", Kind: entrySymlink, LinkTarget: target}},
+			"bundle.zip", filepath.Join(root, "out"), root, formatZIP,
+		)
+		if err == nil {
+			t.Fatalf("unsafe symlink target %q succeeded", target)
+		}
+	}
+}
+
+func TestPlanEntriesRejectsSymlinkAncestor(t *testing.T) {
+	root := t.TempDir()
+	_, _, err := planEntries(
+		[]archiveEntry{
+			{Name: "linked", Kind: entrySymlink, LinkTarget: "outside"},
+			{Name: "linked/escape.txt", Kind: entryFile},
+		},
+		"bundle.zip", filepath.Join(root, "out"), root, formatZIP,
+	)
+	if err == nil {
+		t.Fatal("entry nested under a symlink succeeded")
+	}
+}
+
 func TestPlanEntriesRejectsExistingSymlinkEscape(t *testing.T) {
 	root := t.TempDir()
 	base := filepath.Join(root, "out")
@@ -240,6 +284,51 @@ func TestWriteNewFileSkipsFinalSymlink(t *testing.T) {
 	got, err := os.ReadFile(target)
 	if err != nil || string(got) != "original" {
 		t.Fatalf("symlink target = %q, %v", got, err)
+	}
+}
+
+func TestWriteSymlinkCreatesLink(t *testing.T) {
+	dir := t.TempDir()
+	destination := filepath.Join(dir, "linked")
+
+	skipped, err := writeSymlink(destination, "target.txt", false)
+	if err != nil || skipped {
+		t.Fatalf("writeSymlink() = skipped %v, err %v", skipped, err)
+	}
+	got, err := os.Readlink(destination)
+	if err != nil || got != "target.txt" {
+		t.Fatalf("Readlink() = %q, %v", got, err)
+	}
+}
+
+func TestWriteSymlinkSkipsExistingEntryWithoutOverwrite(t *testing.T) {
+	dir := t.TempDir()
+	destination := filepath.Join(dir, "existing.txt")
+	if err := os.WriteFile(destination, []byte("original"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	skipped, err := writeSymlink(destination, "target.txt", false)
+	if err != nil || !skipped {
+		t.Fatalf("writeSymlink() = skipped %v, err %v", skipped, err)
+	}
+	assertFileContents(t, destination, "original")
+}
+
+func TestWriteSymlinkReplacesExistingEntryWithOverwrite(t *testing.T) {
+	dir := t.TempDir()
+	destination := filepath.Join(dir, "existing.txt")
+	if err := os.WriteFile(destination, []byte("original"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	skipped, err := writeSymlink(destination, "target.txt", true)
+	if err != nil || skipped {
+		t.Fatalf("writeSymlink() = skipped %v, err %v", skipped, err)
+	}
+	got, err := os.Readlink(destination)
+	if err != nil || got != "target.txt" {
+		t.Fatalf("Readlink() = %q, %v", got, err)
 	}
 }
 

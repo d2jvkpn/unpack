@@ -86,11 +86,15 @@ func scanTAR(path string, format archiveFormat, chinese bool) (entries []archive
 		}
 
 		kind := entryKind(0)
+		var linkTarget string
 		switch header.Typeflag {
 		case tar.TypeReg, tar.TypeRegA:
 			kind = entryFile
 		case tar.TypeDir:
 			kind = entryDirectory
+		case tar.TypeSymlink:
+			kind = entrySymlink
+			linkTarget = header.Linkname
 		default:
 			return nil, fmt.Errorf("unsafe TAR entry %q: unsupported type %q", name, header.Typeflag)
 		}
@@ -98,6 +102,7 @@ func scanTAR(path string, format archiveFormat, chinese bool) (entries []archive
 			Name:        name,
 			Kind:        kind,
 			Mode:        fs.FileMode(header.Mode).Perm(),
+			LinkTarget:  linkTarget,
 			SourceIndex: index,
 		})
 	}
@@ -129,7 +134,7 @@ func extractTAR(
 			return nil, fmt.Errorf("TAR entry %q has invalid source index %d", plan.Entry.Name, plan.Entry.SourceIndex)
 		}
 		switch plan.Entry.Kind {
-		case entryFile, entryDirectory:
+		case entryFile, entryDirectory, entrySymlink:
 		default:
 			return nil, fmt.Errorf("TAR entry %q has unsupported entry kind %d", plan.Entry.Name, plan.Entry.Kind)
 		}
@@ -178,6 +183,17 @@ func extractTAR(
 			})
 			if writeErr != nil {
 				return skippedEntries, fmt.Errorf("extract TAR entry %q: %w", plan.Entry.Name, writeErr)
+			}
+			if skipped {
+				skippedEntries = append(skippedEntries, plan.RelativeName)
+			}
+		case entrySymlink:
+			if mkdirErr := directories.ensure(filepath.Dir(plan.Destination)); mkdirErr != nil {
+				return skippedEntries, fmt.Errorf("create parent directories for TAR entry %q: %w", plan.Entry.Name, mkdirErr)
+			}
+			skipped, symlinkErr := writeSymlink(plan.Destination, plan.Entry.LinkTarget, overwrite)
+			if symlinkErr != nil {
+				return skippedEntries, fmt.Errorf("extract TAR entry %q: %w", plan.Entry.Name, symlinkErr)
 			}
 			if skipped {
 				skippedEntries = append(skippedEntries, plan.RelativeName)

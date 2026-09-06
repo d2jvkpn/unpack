@@ -606,32 +606,61 @@ func TestRunRejectsUnsafeArchivesBeforeWritingPayloads(t *testing.T) {
 		assertPathDoesNotExist(t, filepath.Join(outsideDir, "escape.txt"))
 	})
 
-	for _, tt := range []struct {
-		name     string
-		typeflag byte
-	}{
-		{name: "TAR symbolic link", typeflag: tar.TypeSymlink},
-		{name: "TAR hard link", typeflag: tar.TypeLink},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			root := t.TempDir()
-			archivePath := filepath.Join(root, "links.tar")
-			writeTARFixture(t, archivePath, false, []tarFixture{
-				{Name: "safe.txt", Body: "must not be written", Mode: 0o600, Typeflag: tar.TypeReg},
-				{Name: "linked", Mode: 0o777, Typeflag: tt.typeflag, Linkname: "safe.txt"},
-			})
-			outputDir := filepath.Join(root, "output")
-			var stdout, stderr bytes.Buffer
-
-			status := Run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
-
-			if status != 1 {
-				t.Fatalf("Run() status = %d, want 1; stderr = %q", status, stderr.String())
-			}
-			assertPathDoesNotExist(t, filepath.Join(outputDir, "safe.txt"))
-			assertPathDoesNotExist(t, filepath.Join(outputDir, "linked"))
+	t.Run("TAR hard link", func(t *testing.T) {
+		root := t.TempDir()
+		archivePath := filepath.Join(root, "links.tar")
+		writeTARFixture(t, archivePath, false, []tarFixture{
+			{Name: "safe.txt", Body: "must not be written", Mode: 0o600, Typeflag: tar.TypeReg},
+			{Name: "linked", Mode: 0o777, Typeflag: tar.TypeLink, Linkname: "safe.txt"},
 		})
-	}
+		outputDir := filepath.Join(root, "output")
+		var stdout, stderr bytes.Buffer
+
+		status := Run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
+
+		if status != 1 {
+			t.Fatalf("Run() status = %d, want 1; stderr = %q", status, stderr.String())
+		}
+		assertPathDoesNotExist(t, filepath.Join(outputDir, "safe.txt"))
+		assertPathDoesNotExist(t, filepath.Join(outputDir, "linked"))
+	})
+
+	t.Run("TAR symlink target escapes extraction root", func(t *testing.T) {
+		root := t.TempDir()
+		archivePath := filepath.Join(root, "escape-link.tar")
+		writeTARFixture(t, archivePath, false, []tarFixture{
+			{Name: "safe.txt", Body: "must not be written", Mode: 0o600, Typeflag: tar.TypeReg},
+			{Name: "linked", Mode: 0o777, Typeflag: tar.TypeSymlink, Linkname: "../../etc/passwd"},
+		})
+		outputDir := filepath.Join(root, "output")
+		var stdout, stderr bytes.Buffer
+
+		status := Run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
+
+		if status != 1 {
+			t.Fatalf("Run() status = %d, want 1; stderr = %q", status, stderr.String())
+		}
+		assertPathDoesNotExist(t, filepath.Join(outputDir, "safe.txt"))
+		assertPathDoesNotExist(t, filepath.Join(outputDir, "linked"))
+	})
+
+	t.Run("TAR symlink is an ancestor of another entry", func(t *testing.T) {
+		root := t.TempDir()
+		archivePath := filepath.Join(root, "ancestor-link.tar")
+		writeTARFixture(t, archivePath, false, []tarFixture{
+			{Name: "linked", Mode: 0o777, Typeflag: tar.TypeSymlink, Linkname: "outside"},
+			{Name: "linked/escape.txt", Body: "must not be written", Mode: 0o600, Typeflag: tar.TypeReg},
+		})
+		outputDir := filepath.Join(root, "output")
+		var stdout, stderr bytes.Buffer
+
+		status := Run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
+
+		if status != 1 {
+			t.Fatalf("Run() status = %d, want 1; stderr = %q", status, stderr.String())
+		}
+		assertPathDoesNotExist(t, filepath.Join(outputDir, "linked"))
+	})
 
 	t.Run("encrypted ZIP", func(t *testing.T) {
 		root := t.TempDir()
@@ -647,6 +676,54 @@ func TestRunRejectsUnsafeArchivesBeforeWritingPayloads(t *testing.T) {
 			t.Fatalf("Run() status = %d, want 1; stderr = %q", status, stderr.String())
 		}
 		assertPathDoesNotExist(t, filepath.Join(outputDir, "secret.txt"))
+	})
+}
+
+func TestRunExtractsSafeSymlinks(t *testing.T) {
+	t.Run("TAR", func(t *testing.T) {
+		root := t.TempDir()
+		archivePath := filepath.Join(root, "bundle.tar")
+		writeTARFixture(t, archivePath, false, []tarFixture{
+			{Name: "libfoo.so.1.0.0", Body: "payload", Mode: 0o644, Typeflag: tar.TypeReg},
+			{Name: "libfoo.so", Mode: 0o777, Typeflag: tar.TypeSymlink, Linkname: "libfoo.so.1.0.0"},
+		})
+		outputDir := filepath.Join(root, "output")
+		var stdout, stderr bytes.Buffer
+
+		status := Run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
+
+		if status != 0 {
+			t.Fatalf("Run() status = %d, want 0; stderr = %q", status, stderr.String())
+		}
+		linkPath := filepath.Join(outputDir, "libfoo.so")
+		target, err := os.Readlink(linkPath)
+		if err != nil || target != "libfoo.so.1.0.0" {
+			t.Fatalf("Readlink(%q) = %q, %v", linkPath, target, err)
+		}
+		assertFileContents(t, linkPath, "payload")
+	})
+
+	t.Run("ZIP", func(t *testing.T) {
+		root := t.TempDir()
+		archivePath := filepath.Join(root, "bundle.zip")
+		writeZIPFixture(t, archivePath, []zipFixture{
+			{Name: "libfoo.so.1.0.0", Body: "payload", Mode: 0o644},
+			{Name: "libfoo.so", Body: "libfoo.so.1.0.0", Mode: fs.ModeSymlink | 0o777},
+		})
+		outputDir := filepath.Join(root, "output")
+		var stdout, stderr bytes.Buffer
+
+		status := Run([]string{"--output-dir", outputDir, archivePath}, &stdout, &stderr, root)
+
+		if status != 0 {
+			t.Fatalf("Run() status = %d, want 0; stderr = %q", status, stderr.String())
+		}
+		linkPath := filepath.Join(outputDir, "libfoo.so")
+		target, err := os.Readlink(linkPath)
+		if err != nil || target != "libfoo.so.1.0.0" {
+			t.Fatalf("Readlink(%q) = %q, %v", linkPath, target, err)
+		}
+		assertFileContents(t, linkPath, "payload")
 	})
 }
 

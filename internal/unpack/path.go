@@ -48,7 +48,7 @@ func planEntries(
 	topLevel = make(map[string]struct{})
 	for i, entry := range entries {
 		switch entry.Kind {
-		case entryFile, entryDirectory:
+		case entryFile, entryDirectory, entrySymlink:
 		default:
 			return nil, "", fmt.Errorf("unsafe archive entry %q: unsupported entry kind %d", entry.Name, entry.Kind)
 		}
@@ -68,6 +68,17 @@ func planEntries(
 	}
 	if err := rejectFileTopLevelAncestors(names, entries); err != nil {
 		return nil, "", err
+	}
+	if err := rejectSymlinkAncestors(names, entries); err != nil {
+		return nil, "", err
+	}
+	for i, entry := range entries {
+		if entry.Kind != entrySymlink || rootMarkers[i] {
+			continue
+		}
+		if err := validateSymlinkTarget(names[i], entry.LinkTarget); err != nil {
+			return nil, "", fmt.Errorf("unsafe archive entry %q: %w", entry.Name, err)
+		}
 	}
 
 	base = outputDir
@@ -203,6 +214,51 @@ func rejectFileTopLevelAncestors(names []string, entries []archiveEntry) error {
 		if j, hasDescendant := firstDescendants[name]; hasDescendant {
 			return fmt.Errorf("unsafe archive entries %q and %q: file entry is an ancestor", entries[i].Name, entries[j].Name)
 		}
+	}
+	return nil
+}
+
+func rejectSymlinkAncestors(names []string, entries []archiveEntry) error {
+	var symlinkNames map[string]int
+
+	symlinkNames = make(map[string]int)
+	for i, entry := range entries {
+		if entry.Kind == entrySymlink {
+			symlinkNames[names[i]] = i
+		}
+	}
+	for j, name := range names {
+		for symlink, i := range symlinkNames {
+			if i == j {
+				continue
+			}
+			if strings.HasPrefix(name, symlink+"/") {
+				return fmt.Errorf(
+					"unsafe archive entries %q and %q: symlink entry is an ancestor",
+					entries[i].Name, entries[j].Name,
+				)
+			}
+		}
+	}
+	return nil
+}
+
+func validateSymlinkTarget(name string, target string) error {
+	var (
+		normalizedTarget string
+		joined           string
+	)
+
+	normalizedTarget = strings.ReplaceAll(target, "\\", "/")
+	if normalizedTarget == "" {
+		return errors.New("symlink target is empty")
+	}
+	if path.IsAbs(normalizedTarget) || isDriveRootPath(normalizedTarget) {
+		return fmt.Errorf("symlink target %q is absolute", target)
+	}
+	joined = path.Join(path.Dir(name), normalizedTarget)
+	if joined == ".." || strings.HasPrefix(joined, "../") {
+		return fmt.Errorf("symlink target %q traverses outside the extraction directory", target)
 	}
 	return nil
 }
@@ -436,6 +492,27 @@ func writeNewFile(
 			return false, errors.Join(closeErr, fmt.Errorf("remove partial file %q: %w", destination, removeErr))
 		}
 		return false, closeErr
+	}
+	return false, nil
+}
+
+func writeSymlink(destination string, target string, overwrite bool) (skipped bool, err error) {
+	if mkdirErr := os.MkdirAll(filepath.Dir(destination), 0o755); mkdirErr != nil {
+		return false, fmt.Errorf("create parent directories for %q: %w", destination, mkdirErr)
+	}
+
+	err = os.Symlink(target, destination)
+	if overwrite && errors.Is(err, fs.ErrExist) {
+		if removeErr := os.RemoveAll(destination); removeErr != nil {
+			return false, fmt.Errorf("remove existing entry %q: %w", destination, removeErr)
+		}
+		err = os.Symlink(target, destination)
+	}
+	if !overwrite && errors.Is(err, fs.ErrExist) {
+		return true, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("create symlink %q: %w", destination, err)
 	}
 	return false, nil
 }

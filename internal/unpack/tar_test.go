@@ -65,28 +65,35 @@ func TestScanTARPreservesUTF8NameWithChineseEnabled(t *testing.T) {
 	}
 }
 
-func TestScanTARRejectsLinks(t *testing.T) {
-	tests := []struct {
-		name     string
-		typeflag byte
-	}{
-		{name: "symbolic", typeflag: tar.TypeSymlink},
-		{name: "hard", typeflag: tar.TypeLink},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "link.tar")
-			writeTARFixture(t, path, false, []tarFixture{{
-				Name:     "linked",
-				Mode:     0o777,
-				Typeflag: tt.typeflag,
-				Linkname: "target",
-			}})
+func TestScanTARRejectsHardLink(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "link.tar")
+	writeTARFixture(t, path, false, []tarFixture{{
+		Name:     "linked",
+		Mode:     0o777,
+		Typeflag: tar.TypeLink,
+		Linkname: "target",
+	}})
 
-			if _, err := scanTAR(path, formatTAR, false); err == nil {
-				t.Fatal("scanTAR() accepted a link entry")
-			}
-		})
+	if _, err := scanTAR(path, formatTAR, false); err == nil {
+		t.Fatal("scanTAR() accepted a hard link entry")
+	}
+}
+
+func TestScanTARClassifiesSymlinkEntry(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "link.tar")
+	writeTARFixture(t, path, false, []tarFixture{{
+		Name:     "linked",
+		Mode:     0o777,
+		Typeflag: tar.TypeSymlink,
+		Linkname: "target",
+	}})
+
+	entries, err := scanTAR(path, formatTAR, false)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("scanTAR() = %#v, %v", entries, err)
+	}
+	if entries[0].Kind != entrySymlink || entries[0].LinkTarget != "target" {
+		t.Fatalf("entry = %#v, want symlink with LinkTarget %q", entries[0], "target")
 	}
 }
 

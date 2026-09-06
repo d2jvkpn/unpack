@@ -7,7 +7,10 @@ import (
 	"io"
 	"io/fs"
 	"path/filepath"
+	"strings"
 )
+
+const maxSymlinkTargetBytes = 4096
 
 func scanZIP(path string, chinese bool) (entries []archiveEntry, err error) {
 	var reader *zip.ReadCloser
@@ -32,10 +35,18 @@ func scanZIP(path string, chinese bool) (entries []archiveEntry, err error) {
 		if err != nil {
 			return nil, fmt.Errorf("unsafe ZIP entry %q: %w", name, err)
 		}
+		var linkTarget string
+		if kind == entrySymlink {
+			linkTarget, err = readZIPSymlinkTarget(file)
+			if err != nil {
+				return nil, fmt.Errorf("unsafe ZIP entry %q: %w", name, err)
+			}
+		}
 		entries = append(entries, archiveEntry{
 			Name:        name,
 			Kind:        kind,
 			Mode:        file.Mode().Perm(),
+			LinkTarget:  linkTarget,
 			SourceIndex: index,
 		})
 	}
@@ -59,7 +70,7 @@ func extractZIP(path string, plans []plannedEntry, overwrite bool) (skippedEntri
 			return nil, fmt.Errorf("ZIP entry %q has invalid source index %d", plan.Entry.Name, plan.Entry.SourceIndex)
 		}
 		switch plan.Entry.Kind {
-		case entryFile, entryDirectory:
+		case entryFile, entryDirectory, entrySymlink:
 		default:
 			return nil, fmt.Errorf("ZIP entry %q has unsupported entry kind %d", plan.Entry.Name, plan.Entry.Kind)
 		}
@@ -101,6 +112,17 @@ func extractZIP(path string, plans []plannedEntry, overwrite bool) (skippedEntri
 			if skipped {
 				skippedEntries = append(skippedEntries, plan.RelativeName)
 			}
+		case entrySymlink:
+			if err := directories.ensure(filepath.Dir(plan.Destination)); err != nil {
+				return skippedEntries, fmt.Errorf("create parent directories for ZIP entry %q: %w", plan.Entry.Name, err)
+			}
+			skipped, err := writeSymlink(plan.Destination, plan.Entry.LinkTarget, overwrite)
+			if err != nil {
+				return skippedEntries, fmt.Errorf("extract ZIP entry %q: %w", plan.Entry.Name, err)
+			}
+			if skipped {
+				skippedEntries = append(skippedEntries, plan.RelativeName)
+			}
 		}
 	}
 	if err := directories.finalize(); err != nil {
@@ -117,11 +139,38 @@ func zipEntryKind(file *zip.File) (entryKind, error) {
 	switch file.Mode().Type() {
 	case fs.ModeDir:
 		return entryDirectory, nil
+	case fs.ModeSymlink:
+		if strings.HasSuffix(file.Name, "/") {
+			return 0, fmt.Errorf("symlink entry has directory-style name %q", file.Name)
+		}
+		return entrySymlink, nil
 	case 0:
 		return entryFile, nil
 	default:
 		return 0, fmt.Errorf("unsupported file mode %v", file.Mode())
 	}
+}
+
+func readZIPSymlinkTarget(file *zip.File) (target string, err error) {
+	var (
+		reader io.ReadCloser
+		data   []byte
+	)
+
+	reader, err = file.Open()
+	if err != nil {
+		return "", fmt.Errorf("open symlink entry: %w", err)
+	}
+	defer joinCloseError(&err, reader)
+
+	data, err = io.ReadAll(io.LimitReader(reader, maxSymlinkTargetBytes+1))
+	if err != nil {
+		return "", fmt.Errorf("read symlink target: %w", err)
+	}
+	if len(data) > maxSymlinkTargetBytes {
+		return "", fmt.Errorf("symlink target exceeds %d bytes", maxSymlinkTargetBytes)
+	}
+	return string(data), nil
 }
 
 func directoryMode(mode fs.FileMode) fs.FileMode {
