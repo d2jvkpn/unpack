@@ -5,6 +5,10 @@
 	build-windows-amd64 build-windows-arm64 \
 	package
 
+check:
+	go fmt ./...
+	go vet ./...
+
 build:
 	./scripts/build.sh
 
