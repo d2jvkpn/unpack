@@ -82,7 +82,7 @@ func run(args []string, stdout io.Writer, stderr io.Writer, workingDir string) i
 		fmt.Fprintf(stdout, "version:     %s\n", version)
 		fmt.Fprintf(stdout, "commit:      %s\n", revision)
 		fmt.Fprintf(stdout, "commit_time: %s\n", commitTime)
-		fmt.Fprintf(stdout, "dirty:       %t\n", modified)
+		fmt.Fprintf(stdout, "modified:    %t\n", modified)
 		fmt.Fprintf(stdout, "build_time:  %s\n", buildTime)
 		return 0
 	}
