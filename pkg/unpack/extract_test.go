@@ -576,3 +576,62 @@ func assertPathDoesNotExist(t *testing.T, path string) {
 		t.Fatalf("path %q exists or returned unexpected error: %v", path, err)
 	}
 }
+
+func TestExtractDetectsFormatFromContentWithoutExtension(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src.tgz")
+	writeTARFixture(t, src, true, []tarFixture{
+		{Name: "one.txt", Body: "1", Mode: 0o644, Typeflag: tar.TypeReg},
+		{Name: "two.txt", Body: "2", Mode: 0o644, Typeflag: tar.TypeReg},
+	})
+	archivePath := filepath.Join(root, "payload")
+	copyFile(t, src, archivePath)
+	workingDir := filepath.Join(root, "working")
+	if err := os.Mkdir(workingDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Extract(archivePath, Options{WorkingDir: workingDir})
+
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+	if want := filepath.Join(workingDir, "payload"); result.Directory != want {
+		t.Fatalf("Directory = %q, want %q", result.Directory, want)
+	}
+	assertFileContents(t, filepath.Join(workingDir, "payload", "one.txt"), "1")
+}
+
+func TestExtractWithExplicitFormatSkipsDetection(t *testing.T) {
+	root := t.TempDir()
+	archivePath := filepath.Join(root, "bundle.tar")
+	writeZIPFixture(t, archivePath, []zipFixture{{Name: "note.txt", Body: "zip"}})
+	workingDir := filepath.Join(root, "working")
+	if err := os.Mkdir(workingDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Extract(archivePath, Options{WorkingDir: workingDir, Format: FormatZIP})
+
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+	assertFileContents(t, filepath.Join(workingDir, "note.txt"), "zip")
+}
+
+func TestExtractWithMismatchedFormatFailsWithoutWriting(t *testing.T) {
+	root := t.TempDir()
+	archivePath := filepath.Join(root, "bundle.zip")
+	writeZIPFixture(t, archivePath, []zipFixture{{Name: "note.txt", Body: "zip"}})
+	workingDir := filepath.Join(root, "working")
+	if err := os.Mkdir(workingDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Extract(archivePath, Options{WorkingDir: workingDir, Format: FormatTarGzip})
+
+	if err == nil {
+		t.Fatal("Extract() succeeded with mismatched format")
+	}
+	assertPathDoesNotExist(t, filepath.Join(workingDir, "note.txt"))
+}

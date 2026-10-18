@@ -6,9 +6,14 @@
 package unpack
 
 import (
+	"bytes"
+	"compress/gzip"
 	"fmt"
+	"io"
 	"io/fs"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -41,10 +46,21 @@ type Entry struct {
 	SourceIndex int
 }
 
-// DetectFormat identifies an archive's format from its filename suffix. It returns
-// ErrUnsupportedFormat, wrapped with the rejected filename, when the suffix isn't recognized.
+// DetectFormat identifies an archive's format. It first sniffs the file's leading bytes (ZIP and
+// gzip magic numbers, TAR header), so a misnamed or extensionless archive is still recognized, and
+// falls back to the filename suffix when the content isn't recognized or can't be read. It
+// returns ErrUnsupportedFormat, wrapped with the rejected filename, when neither identifies a
+// supported format.
 func DetectFormat(path string) (Format, error) {
-	var lower string
+	var (
+		format Format
+		lower  string
+	)
+
+	format = sniffFormat(path)
+	if format != 0 {
+		return format, nil
+	}
 
 	lower = strings.ToLower(path)
 	switch {
@@ -59,22 +75,123 @@ func DetectFormat(path string) (Format, error) {
 	}
 }
 
+// ParseFormat converts a user-supplied format name (zip, tar, tar.gz, or its alias tgz,
+// case-insensitive) into a Format. It returns ErrUnsupportedFormat, wrapped, for anything else.
+func ParseFormat(name string) (Format, error) {
+	switch strings.ToLower(name) {
+	case "zip":
+		return FormatZIP, nil
+	case "tar":
+		return FormatTAR, nil
+	case "tar.gz", "tgz":
+		return FormatTarGzip, nil
+	default:
+		return 0, fmt.Errorf("%w: %q (want zip, tar, or tar.gz)", ErrUnsupportedFormat, name)
+	}
+}
+
+const tarBlockSize = 512
+
+// sniffFormat identifies the format from file content alone, returning 0 when the content isn't
+// recognized or the file can't be read.
+func sniffFormat(path string) Format {
+	var (
+		file       *os.File
+		head       []byte
+		n          int
+		gzipReader *gzip.Reader
+		inner      []byte
+		err        error
+	)
+
+	file, err = os.Open(path)
+	if err != nil {
+		return 0
+	}
+	defer file.Close()
+
+	head = make([]byte, tarBlockSize)
+	n, _ = io.ReadFull(file, head)
+	head = head[:n]
+
+	switch {
+	case bytes.HasPrefix(head, []byte("PK\x03\x04")), bytes.HasPrefix(head, []byte("PK\x05\x06")):
+		return FormatZIP
+	case bytes.HasPrefix(head, []byte{0x1f, 0x8b}):
+		_, err = file.Seek(0, io.SeekStart)
+		if err != nil {
+			return 0
+		}
+		gzipReader, err = gzip.NewReader(file)
+		if err != nil {
+			return 0
+		}
+		defer gzipReader.Close()
+		inner = make([]byte, tarBlockSize)
+		n, _ = io.ReadFull(gzipReader, inner)
+		if isTARHeader(inner[:n]) {
+			return FormatTarGzip
+		}
+		return 0
+	case isTARHeader(head):
+		return FormatTAR
+	}
+	return 0
+}
+
+// isTARHeader reports whether block looks like a TAR header: either the POSIX "ustar" magic, or
+// (for V7 archives without it) a valid, non-blank header checksum.
+func isTARHeader(block []byte) bool {
+	var (
+		sum    int
+		stored int64
+		field  string
+		err    error
+	)
+
+	if len(block) < tarBlockSize {
+		return false
+	}
+	if bytes.HasPrefix(block[257:], []byte("ustar")) {
+		return true
+	}
+	for i, b := range block {
+		if i >= 148 && i < 156 {
+			b = ' '
+		}
+		sum += int(b)
+	}
+	if sum == 8*' ' {
+		return false
+	}
+	field = strings.Trim(string(block[148:156]), " \x00")
+	stored, err = strconv.ParseInt(field, 8, 64)
+	return err == nil && stored == int64(sum)
+}
+
 func archiveBaseName(path string, format Format) string {
 	var (
-		name   string
-		lower  string
-		suffix string
+		name     string
+		lower    string
+		suffixes []string
 	)
 
 	name = filepath.Base(path)
 	lower = strings.ToLower(name)
-	suffix = map[Format]string{
-		FormatZIP: ".zip", FormatTAR: ".tar", FormatTarGzip: ".tgz",
-	}[format]
-	if format == FormatTarGzip && strings.HasSuffix(lower, ".tar.gz") {
-		suffix = ".tar.gz"
+	switch format {
+	case FormatZIP:
+		suffixes = []string{".zip"}
+	case FormatTAR:
+		suffixes = []string{".tar"}
+	case FormatTarGzip:
+		suffixes = []string{".tar.gz", ".tgz"}
 	}
-	return name[:len(name)-len(suffix)]
+	for _, suffix := range suffixes {
+		if strings.HasSuffix(lower, suffix) {
+			return name[:len(name)-len(suffix)]
+		}
+	}
+	return name
 }
 
 // Scan reads every entry in the archive at path without writing anything to disk. It returns

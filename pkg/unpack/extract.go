@@ -22,6 +22,9 @@ type Options struct {
 	// Selectors restricts extraction to entries matching at least one selector (see
 	// FilterPlans). Empty extracts everything.
 	Selectors []string
+	// Format forces the archive format and skips detection. The zero value detects it from the
+	// file's content, falling back to its filename suffix.
+	Format Format
 }
 
 // Result reports what Extract did.
@@ -48,9 +51,12 @@ func Extract(archivePath string, opts Options) (Result, error) {
 		err     error
 	)
 
-	format, err = DetectFormat(archivePath)
-	if err != nil {
-		return result, fmt.Errorf("extract archive %q: %w", archivePath, err)
+	format = opts.Format
+	if format == 0 {
+		format, err = DetectFormat(archivePath)
+		if err != nil {
+			return result, fmt.Errorf("extract archive %q: %w", archivePath, err)
+		}
 	}
 
 	directory := opts.Directory

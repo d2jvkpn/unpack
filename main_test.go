@@ -75,7 +75,7 @@ func TestRunShowsHelpAndParsesSupportedFlags(t *testing.T) {
 			t.Fatalf("run(--help) status = %d, stderr = %q", status, stderr.String())
 		}
 		for _, text := range []string{
-			"unpack [--cn] [--directory DIR] [--overwrite] [--version] ARCHIVE [FILE...]",
+			"unpack [--cn] [--directory DIR] [--format FORMAT] [--overwrite] [--version] ARCHIVE [FILE...]",
 			"--cn",
 			"--directory, -d DIR",
 		} {
@@ -93,7 +93,7 @@ func TestRunRequiresAtLeastOneArchive(t *testing.T) {
 	if status != 2 {
 		t.Fatalf("run() status = %d, want 2", status)
 	}
-	wantUsage := "Usage: unpack [--cn] [--directory DIR] [--overwrite] [--version] ARCHIVE [FILE...]"
+	wantUsage := "Usage: unpack [--cn] [--directory DIR] [--format FORMAT] [--overwrite] [--version] ARCHIVE [FILE...]"
 	if !strings.Contains(stderr.String(), wantUsage) {
 		t.Fatalf("stderr = %q, want usage", stderr.String())
 	}
@@ -273,4 +273,75 @@ func TestRunTreatsTrailingArchivePathAsSelectorNotSecondArchive(t *testing.T) {
 	}
 	assertPathDoesNotExist(t, filepath.Join(outputDir, "first.txt"))
 	assertPathDoesNotExist(t, filepath.Join(outputDir, "second.txt"))
+}
+
+func TestRunDetectsFormatFromContentWithoutExtension(t *testing.T) {
+	root := t.TempDir()
+	archivePath := filepath.Join(root, "payload")
+	writeZIPFixture(t, archivePath, []zipFixture{{Name: "note.txt", Body: "content"}})
+	workingDir := filepath.Join(root, "working")
+	if err := os.Mkdir(workingDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+
+	status := run([]string{archivePath}, &stdout, &stderr, workingDir)
+
+	if status != 0 {
+		t.Fatalf("run() status = %d, stderr = %q", status, stderr.String())
+	}
+	assertFileContents(t, filepath.Join(workingDir, "note.txt"), "content")
+}
+
+func TestRunFormatFlagForcesFormat(t *testing.T) {
+	root := t.TempDir()
+	archivePath := filepath.Join(root, "bundle.tar")
+	writeZIPFixture(t, archivePath, []zipFixture{{Name: "note.txt", Body: "content"}})
+	workingDir := filepath.Join(root, "working")
+	if err := os.Mkdir(workingDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+
+	status := run([]string{"--format", "zip", archivePath}, &stdout, &stderr, workingDir)
+
+	if status != 0 {
+		t.Fatalf("run() status = %d, stderr = %q", status, stderr.String())
+	}
+	assertFileContents(t, filepath.Join(workingDir, "note.txt"), "content")
+}
+
+func TestRunFormatFlagMismatchFailsWithoutWriting(t *testing.T) {
+	root := t.TempDir()
+	archivePath := filepath.Join(root, "bundle.zip")
+	writeZIPFixture(t, archivePath, []zipFixture{{Name: "note.txt", Body: "content"}})
+	workingDir := filepath.Join(root, "working")
+	if err := os.Mkdir(workingDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+
+	status := run([]string{"--format", "tar.gz", archivePath}, &stdout, &stderr, workingDir)
+
+	if status != 1 {
+		t.Fatalf("run() status = %d, want 1; stderr = %q", status, stderr.String())
+	}
+	assertPathDoesNotExist(t, filepath.Join(workingDir, "note.txt"))
+}
+
+func TestRunRejectsInvalidFormatValue(t *testing.T) {
+	root := t.TempDir()
+	archivePath := filepath.Join(root, "bundle.zip")
+	writeZIPFixture(t, archivePath, []zipFixture{{Name: "note.txt", Body: "content"}})
+	var stdout, stderr bytes.Buffer
+
+	status := run([]string{"--format", "rar", archivePath}, &stdout, &stderr, root)
+
+	if status != 2 {
+		t.Fatalf("run() status = %d, want 2; stderr = %q", status, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "rar") {
+		t.Fatalf("stderr = %q, want mention of rar", stderr.String())
+	}
+	assertPathDoesNotExist(t, filepath.Join(root, "note.txt"))
 }

@@ -2,8 +2,8 @@ package unpack
 
 import "errors"
 
-// ErrUnsupportedFormat is returned, wrapped, by DetectFormat when a filename's extension isn't
-// one of the supported archive formats.
+// ErrUnsupportedFormat is returned, wrapped, by DetectFormat and ParseFormat when neither a file's
+// content nor its extension identifies a supported archive format.
 var ErrUnsupportedFormat = errors.New("unsupported archive format")
 
 // ErrNoMatch is returned, wrapped, by FilterPlans when a selector matches no entries.

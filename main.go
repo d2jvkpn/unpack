@@ -31,6 +31,8 @@ func run(args []string, stdout io.Writer, stderr io.Writer, workingDir string) i
 		chinese     bool
 		outputDir   string
 		overwrite   bool
+		formatName  string
+		format      unpack.Format
 		showVersion bool
 		archivePath string
 		selectors   []string
@@ -44,11 +46,14 @@ func run(args []string, stdout io.Writer, stderr io.Writer, workingDir string) i
 	flags.StringVar(&outputDir, "directory", "", "extract into DIR")
 	flags.StringVar(&outputDir, "d", "", "extract into DIR (shorthand for --directory)")
 	flags.BoolVar(&overwrite, "overwrite", false, "overwrite existing files and directories")
+	flags.StringVar(&formatName, "format", "", "force archive format: zip, tar, or tar.gz")
 	flags.BoolVar(&showVersion, "version", false, "print version information and exit")
 	flags.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: unpack [--cn] [--directory DIR] [--overwrite] [--version] ARCHIVE [FILE...]")
+		fmt.Fprintln(stderr, "Usage: unpack [--cn] [--directory DIR] [--format FORMAT] [--overwrite] [--version] ARCHIVE [FILE...]")
 		fmt.Fprintln(stderr, "  --cn                 decode legacy Chinese filenames as GBK")
 		fmt.Fprintln(stderr, "  --directory, -d DIR  extract into DIR")
+		fmt.Fprintln(stderr, "  --format FORMAT      force archive format: zip, tar, or tar.gz")
+		fmt.Fprintln(stderr, "                       (default: detect from content, then file suffix)")
 		fmt.Fprintln(stderr, "  --overwrite          overwrite existing files and directories")
 		fmt.Fprintln(stderr, "  --version            print version information and exit")
 		fmt.Fprintln(stderr)
@@ -90,6 +95,13 @@ func run(args []string, stdout io.Writer, stderr io.Writer, workingDir string) i
 		flags.Usage()
 		return 2
 	}
+	if formatName != "" {
+		format, err = unpack.ParseFormat(formatName)
+		if err != nil {
+			fmt.Fprintf(stderr, "Error: --format: %v\n", err)
+			return 2
+		}
+	}
 	archivePath = flags.Args()[0]
 	if unpack.IsRemoteURL(archivePath) {
 		fmt.Fprintf(stdout, "Downloading: %s\n", archivePath)
@@ -109,6 +121,7 @@ func run(args []string, stdout io.Writer, stderr io.Writer, workingDir string) i
 		Chinese:    chinese,
 		Overwrite:  overwrite,
 		Selectors:  selectors,
+		Format:     format,
 	})
 	if result.Directory != "" {
 		fmt.Fprintf(stdout, "Extracting: %s\n", archivePath)
@@ -135,7 +148,7 @@ func validateOptionSyntax(args []string) error {
 		if arg == "--" {
 			return nil
 		}
-		if arg == "--directory" || arg == "-d" {
+		if arg == "--directory" || arg == "-d" || arg == "--format" {
 			skipOperand = true
 			continue
 		}

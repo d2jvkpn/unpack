@@ -38,21 +38,28 @@ You can also copy the binary produced by the build command to a directory on you
 ## Usage
 
 ```text
-unpack [--cn] [--directory DIR] [--overwrite] [--version] ARCHIVE [FILE...]
+unpack [--cn] [--directory DIR] [--format FORMAT] [--overwrite] [--version] ARCHIVE [FILE...]
 ```
 
 Exactly one archive is required, given as a local path or an `http://`/`https://` URL. A URL is
 downloaded to a temporary file (following up to 5 redirects, with a 10-second response-header
 timeout and a 5-minute overall download timeout) before the usual extraction logic runs; the
-temporary file and its containing directory are removed afterward. Supported filename extensions
-are `.zip`, `.tar`, `.tar.gz`, and `.tgz`, matched case-insensitively against the filename taken
-from the input URL (redirects are followed for the download itself but do not change the filename
+temporary file and its containing directory are removed afterward. The format (ZIP, TAR, or
+gzip-compressed TAR) is detected from the file's content, so a misnamed or extensionless archive
+still works; when the content isn't recognized, the case-insensitive filename suffix (`.zip`,
+`.tar`, `.tar.gz`, `.tgz`) is used instead. For a URL the suffix comes from the input URL's
+filename (redirects are followed for the download itself but do not change the filename
 used). Any arguments after the archive are file selectors (see
 [Selecting specific files](#selecting-specific-files)); with none, the whole archive is extracted.
 The final status is zero on success, one when the archive fails to process (including a selector
 matching nothing or a download failure), and two for invalid command usage.
 
-`--directory` has the short alias `-d`. `--overwrite` and `--version` have no short aliases.
+`--directory` has the short alias `-d`. `--format`, `--overwrite`, and `--version` have no short
+aliases.
+
+`--format zip|tar|tar.gz` (alias `tgz`) skips detection and parses the archive as the given format;
+if the content doesn't match, extraction fails without writing anything. A standalone `.gz` file
+(not a TAR) is not supported.
 
 Before extracting each archive, `unpack` prints the archive path and the resolved output
 directory, for example:
@@ -87,7 +94,7 @@ which injects it via `-ldflags`. A plain `go build` invocation without that ldfl
 Without `--directory`, an archive containing one top-level item extracts directly into the current
 directory and retains that item's path. An archive containing multiple top-level items extracts
 into a directory named after the archive with its complete recognized suffix removed. For example,
-`a.tar.gz` extracts into `./a/`, not `./a.tar/`.
+`a.tar.gz` extracts into `./a/`, not `./a.tar/`. A name without a recognized suffix is used as is.
 
 With `--directory`, the archive extracts into the specified directory. When an archive contains
 one top-level directory, that wrapper directory is stripped: `wrapper/note.txt` becomes
