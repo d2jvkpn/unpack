@@ -45,6 +45,91 @@ func TestScanTARClassifiesEntriesAcrossFormats(t *testing.T) {
 	}
 }
 
+func TestExtractTARXZWritesPlannedEntries(t *testing.T) {
+	var (
+		root     string
+		path     string
+		entries  []Entry
+		plans    []Plan
+		contents []byte
+		err      error
+	)
+
+	root = t.TempDir()
+	path = filepath.Join(root, "bundle.tar.xz")
+	writeTARXZFixture(t, path, []tarFixture{
+		{Name: "docs/", Mode: fs.ModeDir | 0o750, Typeflag: tar.TypeDir},
+		{Name: "docs/note.txt", Body: "xz content", Mode: 0o600, Typeflag: tar.TypeReg},
+	})
+
+	entries, err = scanTAR(path, FormatTarXz, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plans, _, err = PlanEntries(entries, path, filepath.Join(root, "out"), root, FormatTarXz)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := extractTAR(path, FormatTarXz, plans, false); err != nil {
+		t.Fatal(err)
+	}
+
+	contents, err = os.ReadFile(filepath.Join(root, "out", "note.txt"))
+	if err != nil || string(contents) != "xz content" {
+		t.Fatalf("extracted contents = %q, %v", contents, err)
+	}
+}
+
+func TestExtractBzip2WritesSingleFile(t *testing.T) {
+	var (
+		root     string
+		path     string
+		result   Result
+		contents []byte
+		err      error
+	)
+
+	root = t.TempDir()
+	path = filepath.Join(root, "payload.bz")
+	writeBzip2Fixture(t, path, standaloneBzip2Fixture)
+
+	result, err = Extract(path, Options{WorkingDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Directory != root {
+		t.Fatalf("Extract().Directory = %q, want %q", result.Directory, root)
+	}
+
+	contents, err = os.ReadFile(filepath.Join(root, "payload"))
+	if err != nil || string(contents) != "standalone bz content\n" {
+		t.Fatalf("extracted contents = %q, %v", contents, err)
+	}
+}
+
+func TestExtractTarBzip2AliasWritesEntries(t *testing.T) {
+	var (
+		root     string
+		path     string
+		result   Result
+		contents []byte
+		err      error
+	)
+
+	root = t.TempDir()
+	path = filepath.Join(root, "bundle.tar.bz")
+	writeBzip2Fixture(t, path, tarBzip2Fixture)
+
+	result, err = Extract(path, Options{Directory: filepath.Join(root, "out"), WorkingDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents, err = os.ReadFile(filepath.Join(result.Directory, "note.txt"))
+	if err != nil || string(contents) != "tar bz content\n" {
+		t.Fatalf("extracted contents = %q, %v", contents, err)
+	}
+}
+
 func TestScanTARDecodesLegacyChineseName(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "legacy.tar")
 	raw := string([]byte{0xd6, 0xd0, 0xce, 0xc4, '.', 't', 'x', 't'})

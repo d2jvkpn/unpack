@@ -22,6 +22,11 @@ func TestDetectFormatAndBaseName(t *testing.T) {
 		{"a.TAR", FormatTAR, "a"},
 		{"a.tar.gz", FormatTarGzip, "a"},
 		{"a.TGZ", FormatTarGzip, "a"},
+		{"a.tar.xz", FormatTarXz, "a"},
+		{"a.TXZ", FormatTarXz, "a"},
+		{"a.tar.bz", FormatTarBzip2, "a"},
+		{"a.TBZ", FormatTarBzip2, "a"},
+		{"a.bz", FormatBzip2, "a"},
 	}
 	for _, tt := range tests {
 		got, err := DetectFormat(tt.path)
@@ -61,9 +66,15 @@ func TestDetectFormatSniffsContentIgnoringExtension(t *testing.T) {
 	zipPath := filepath.Join(dir, "src.zip")
 	tarPath := filepath.Join(dir, "src.tar")
 	tgzPath := filepath.Join(dir, "src.tgz")
+	xzPath := filepath.Join(dir, "src.tar.xz")
+	bzPath := filepath.Join(dir, "src.bz")
+	tarBzPath := filepath.Join(dir, "src.tar.bz")
 	writeZIPFixture(t, zipPath, []zipFixture{{Name: "a.txt", Body: "a"}})
 	writeTARFixture(t, tarPath, false, []tarFixture{{Name: "a.txt", Body: "a", Mode: 0o644, Typeflag: tar.TypeReg}})
 	writeTARFixture(t, tgzPath, true, []tarFixture{{Name: "a.txt", Body: "a", Mode: 0o644, Typeflag: tar.TypeReg}})
+	writeTARXZFixture(t, xzPath, []tarFixture{{Name: "a.txt", Body: "a", Mode: 0o644, Typeflag: tar.TypeReg}})
+	writeBzip2Fixture(t, bzPath, standaloneBzip2Fixture)
+	writeBzip2Fixture(t, tarBzPath, tarBzip2Fixture)
 
 	tests := []struct {
 		src    string
@@ -76,6 +87,10 @@ func TestDetectFormatSniffsContentIgnoringExtension(t *testing.T) {
 		{tarPath, "wrong.zip", FormatTAR},
 		{tgzPath, "data.bin", FormatTarGzip},
 		{tgzPath, "wrong.zip", FormatTarGzip},
+		{xzPath, "data.bin", FormatTarXz},
+		{xzPath, "wrong.zip", FormatTarXz},
+		{bzPath, "data.bin", FormatBzip2},
+		{tarBzPath, "wrong.zip", FormatTarBzip2},
 	}
 	for _, tt := range tests {
 		target := filepath.Join(dir, tt.target)
@@ -188,6 +203,8 @@ func TestArchiveBaseNameKeepsNameWithoutMatchingSuffix(t *testing.T) {
 func TestParseFormat(t *testing.T) {
 	tests := map[string]Format{
 		"zip": FormatZIP, "tar": FormatTAR, "tar.gz": FormatTarGzip, "tgz": FormatTarGzip, "ZIP": FormatZIP,
+		"tar.xz": FormatTarXz, "txz": FormatTarXz, "TXZ": FormatTarXz,
+		"tar.bz": FormatTarBzip2, "tbz": FormatTarBzip2, "bz": FormatBzip2,
 	}
 	for in, want := range tests {
 		if got, err := ParseFormat(in); err != nil || got != want {

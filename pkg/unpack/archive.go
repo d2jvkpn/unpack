@@ -1,4 +1,4 @@
-// Package unpack safely extracts ZIP, TAR, TAR.GZ, and TGZ archives: it validates every entry's
+// Package unpack safely extracts ZIP, TAR, compressed TAR variants, and standalone Bzip2 files: it validates every entry's
 // destination before writing anything to disk, rejecting path traversal, symlink escapes, and
 // unsupported entry types. Extract is the high-level entry point; DetectFormat, Scan,
 // PlanEntries, FilterPlans, and WritePlans are lower-level primitives for callers that want to
@@ -7,7 +7,6 @@ package unpack
 
 import (
 	"bytes"
-	"compress/gzip"
 	"fmt"
 	"io"
 	"io/fs"
@@ -25,6 +24,9 @@ const (
 	FormatZIP Format = iota + 1
 	FormatTAR
 	FormatTarGzip
+	FormatTarXz
+	FormatTarBzip2
+	FormatBzip2
 )
 
 // EntryKind identifies what an archive entry represents on disk.
@@ -66,6 +68,13 @@ func DetectFormat(path string) (Format, error) {
 	switch {
 	case strings.HasSuffix(lower, ".tar.gz"), strings.HasSuffix(lower, ".tgz"):
 		return FormatTarGzip, nil
+	case strings.HasSuffix(lower, ".tar.xz"), strings.HasSuffix(lower, ".txz"):
+		return FormatTarXz, nil
+	case strings.HasSuffix(lower, ".tar.bz2"), strings.HasSuffix(lower, ".tbz2"),
+		strings.HasSuffix(lower, ".tbz"), strings.HasSuffix(lower, ".tar.bz"):
+		return FormatTarBzip2, nil
+	case strings.HasSuffix(lower, ".bz"), strings.HasSuffix(lower, ".bzip2"):
+		return FormatBzip2, nil
 	case strings.HasSuffix(lower, ".tar"):
 		return FormatTAR, nil
 	case strings.HasSuffix(lower, ".zip"):
@@ -75,8 +84,8 @@ func DetectFormat(path string) (Format, error) {
 	}
 }
 
-// ParseFormat converts a user-supplied format name (zip, tar, tar.gz, or its alias tgz,
-// case-insensitive) into a Format. It returns ErrUnsupportedFormat, wrapped, for anything else.
+// ParseFormat converts a user-supplied format name into a Format, case-insensitively. It returns
+// ErrUnsupportedFormat, wrapped, for anything else.
 func ParseFormat(name string) (Format, error) {
 	switch strings.ToLower(name) {
 	case "zip":
@@ -85,8 +94,14 @@ func ParseFormat(name string) (Format, error) {
 		return FormatTAR, nil
 	case "tar.gz", "tgz":
 		return FormatTarGzip, nil
+	case "tar.xz", "txz":
+		return FormatTarXz, nil
+	case "tar.bz2", "tbz2", "tar.bz", "tbz":
+		return FormatTarBzip2, nil
+	case "bz", "bzip2":
+		return FormatBzip2, nil
 	default:
-		return 0, fmt.Errorf("%w: %q (want zip, tar, or tar.gz)", ErrUnsupportedFormat, name)
+		return 0, fmt.Errorf("%w: %q (want zip, tar, tar.gz, tar.xz, tar.bz, or bz)", ErrUnsupportedFormat, name)
 	}
 }
 
@@ -96,12 +111,13 @@ const tarBlockSize = 512
 // recognized or the file can't be read.
 func sniffFormat(path string) Format {
 	var (
-		file       *os.File
-		head       []byte
-		n          int
-		gzipReader *gzip.Reader
-		inner      []byte
-		err        error
+		file   *os.File
+		head   []byte
+		n      int
+		format Format
+		inner  io.Reader
+		block  []byte
+		err    error
 	)
 
 	file, err = os.Open(path)
@@ -118,23 +134,41 @@ func sniffFormat(path string) Format {
 	case bytes.HasPrefix(head, []byte("PK\x03\x04")), bytes.HasPrefix(head, []byte("PK\x05\x06")):
 		return FormatZIP
 	case bytes.HasPrefix(head, []byte{0x1f, 0x8b}):
-		_, err = file.Seek(0, io.SeekStart)
-		if err != nil {
-			return 0
-		}
-		gzipReader, err = gzip.NewReader(file)
-		if err != nil {
-			return 0
-		}
-		defer gzipReader.Close()
-		inner = make([]byte, tarBlockSize)
-		n, _ = io.ReadFull(gzipReader, inner)
-		if isTARHeader(inner[:n]) {
-			return FormatTarGzip
-		}
-		return 0
+		format = FormatTarGzip
+	case bytes.HasPrefix(head, []byte{0xfd, '7', 'z', 'X', 'Z', 0x00}):
+		format = FormatTarXz
+	case bytes.HasPrefix(head, []byte("BZh")):
+		format = FormatBzip2
 	case isTARHeader(head):
 		return FormatTAR
+	default:
+		return 0
+	}
+
+	_, err = file.Seek(0, io.SeekStart)
+	if err != nil {
+		return 0
+	}
+	inner, err = decompress(format, file)
+	if err != nil {
+		return 0
+	}
+	if closer, ok := inner.(io.Closer); ok {
+		defer closer.Close()
+	}
+	block = make([]byte, tarBlockSize)
+	n, _ = io.ReadFull(inner, block)
+	if isTARHeader(block[:n]) {
+		if format == FormatBzip2 {
+			return FormatTarBzip2
+		}
+		return format
+	}
+	if format == FormatBzip2 {
+		_, err = io.Copy(io.Discard, inner)
+		if err == nil {
+			return FormatBzip2
+		}
 	}
 	return 0
 }
@@ -185,6 +219,12 @@ func archiveBaseName(path string, format Format) string {
 		suffixes = []string{".tar"}
 	case FormatTarGzip:
 		suffixes = []string{".tar.gz", ".tgz"}
+	case FormatTarXz:
+		suffixes = []string{".tar.xz", ".txz"}
+	case FormatTarBzip2:
+		suffixes = []string{".tar.bz2", ".tbz2", ".tbz", ".tar.bz"}
+	case FormatBzip2:
+		suffixes = []string{".bz", ".bzip2"}
 	}
 	for _, suffix := range suffixes {
 		if strings.HasSuffix(lower, suffix) {
@@ -206,8 +246,10 @@ func Scan(path string, format Format, chinese bool) ([]Entry, error) {
 	switch format {
 	case FormatZIP:
 		entries, err = scanZIP(path, chinese)
-	case FormatTAR, FormatTarGzip:
+	case FormatTAR, FormatTarGzip, FormatTarXz, FormatTarBzip2:
 		entries, err = scanTAR(path, format, chinese)
+	case FormatBzip2:
+		entries, err = scanBzip2(path)
 	default:
 		err = fmt.Errorf("unsupported archive format %d", format)
 	}
@@ -234,8 +276,10 @@ func WritePlans(
 	switch format {
 	case FormatZIP:
 		skipped, err = extractZIP(path, plans, overwrite)
-	case FormatTAR, FormatTarGzip:
+	case FormatTAR, FormatTarGzip, FormatTarXz, FormatTarBzip2:
 		skipped, err = extractTAR(path, format, plans, overwrite)
+	case FormatBzip2:
+		skipped, err = extractBzip2(path, plans, overwrite)
 	default:
 		err = fmt.Errorf("unsupported archive format %d", format)
 	}

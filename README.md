@@ -1,6 +1,7 @@
 # unpack
 
-Extract ZIP, TAR, TAR.GZ, and TGZ archives with safe paths, a smart default destination, an
+Extract ZIP, TAR, TAR.GZ/TGZ, TAR.XZ/TXZ, and TAR.BZ2/TBZ2 archives, plus standalone Bzip2 files,
+with safe paths, a smart
 overridable output directory (`--directory`/`-d`), optional extraction of specific files, optional
 overwrite of existing files, and optional legacy Chinese filename decoding.
 
@@ -45,9 +46,10 @@ Exactly one archive is required, given as a local path or an `http://`/`https://
 downloaded to a temporary file (following up to 5 redirects, with a 10-second response-header
 timeout and a 5-minute overall download timeout) before the usual extraction logic runs; the
 temporary file and its containing directory are removed afterward. The format (ZIP, TAR, or
-gzip-compressed TAR) is detected from the file's content, so a misnamed or extensionless archive
-still works; when the content isn't recognized, the case-insensitive filename suffix (`.zip`,
-`.tar`, `.tar.gz`, `.tgz`) is used instead. For a URL the suffix comes from the input URL's
+compressed TAR) is detected from the file's content, so a misnamed or extensionless archive still
+works; when the content isn't recognized, the case-insensitive filename suffix (`.zip`, `.tar`,
+`.tar.gz`, `.tgz`, `.tar.xz`, `.txz`, `.tar.bz2`, `.tbz2`, `.tbz`, `.tar.bz`, `.bz`) is used instead. For a URL the
+suffix comes from the input URL's
 filename (redirects are followed for the download itself but do not change the filename
 used). Any arguments after the archive are file selectors (see
 [Selecting specific files](#selecting-specific-files)); with none, the whole archive is extracted.
@@ -57,7 +59,9 @@ matching nothing or a download failure), and two for invalid command usage.
 `--directory` has the short alias `-d`. `--format`, `--overwrite`, and `--version` have no short
 aliases.
 
-`--format zip|tar|tar.gz` (alias `tgz`) skips detection and parses the archive as the given format;
+`--format zip|tar|tar.gz|tar.xz|tar.bz|bz` (aliases `tgz`, `txz`, `tbz2`, and `tbz`) skips detection.
+For `bz`, the decompressed single file is written using the input name without its `.bz` suffix;
+the other values parse the input as an archive.
 if the content doesn't match, extraction fails without writing anything. A standalone `.gz` file
 (not a TAR) is not supported.
 

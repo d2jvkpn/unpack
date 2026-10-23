@@ -2,6 +2,7 @@ package unpack
 
 import (
 	"archive/tar"
+	"compress/bzip2"
 	"compress/gzip"
 	"errors"
 	"fmt"
@@ -10,13 +11,35 @@ import (
 	"os"
 	"path/filepath"
 	"unicode/utf8"
+
+	"github.com/ulikunitz/xz"
 )
+
+// isCompressedTAR reports whether format is a TAR stream wrapped in a single compressor.
+func isCompressedTAR(format Format) bool {
+	return format == FormatTarGzip || format == FormatTarXz || format == FormatTarBzip2
+}
+
+// decompress wraps r in the decompressor for a compressed TAR format.
+func decompress(format Format, r io.Reader) (io.Reader, error) {
+	switch format {
+	case FormatTarGzip:
+		return gzip.NewReader(r)
+	case FormatTarXz:
+		return xz.NewReader(r)
+	case FormatTarBzip2:
+		return bzip2.NewReader(r), nil
+	case FormatBzip2:
+		return bzip2.NewReader(r), nil
+	default:
+		return nil, fmt.Errorf("unsupported compressed TAR format %d", format)
+	}
+}
 
 func openTAR(path string, format Format) (*tar.Reader, func() error, error) {
 	var (
 		file         *os.File
 		reader       io.Reader
-		gzipReader   *gzip.Reader
 		closeArchive func() error
 		err          error
 	)
@@ -27,14 +50,13 @@ func openTAR(path string, format Format) (*tar.Reader, func() error, error) {
 	}
 
 	reader = file
-	switch format {
-	case FormatTAR:
-	case FormatTarGzip:
-		gzipReader, err = gzip.NewReader(file)
+	switch {
+	case format == FormatTAR:
+	case isCompressedTAR(format):
+		reader, err = decompress(format, file)
 		if err != nil {
-			return nil, nil, errors.Join(fmt.Errorf("open gzip TAR archive %q: %w", path, err), file.Close())
+			return nil, nil, errors.Join(fmt.Errorf("open compressed TAR archive %q: %w", path, err), file.Close())
 		}
-		reader = gzipReader
 	default:
 		return nil, nil, errors.Join(fmt.Errorf("unsupported TAR format %d", format), file.Close())
 	}
@@ -42,17 +64,21 @@ func openTAR(path string, format Format) (*tar.Reader, func() error, error) {
 	closeArchive = func() error {
 		var (
 			drainErr     error
-			gzipCloseErr error
-			fileCloseErr error
+			readerCloser io.Closer
+			readerErr    error
+			ok           bool
 		)
 
-		if gzipReader == nil {
+		if reader == io.Reader(file) {
 			return file.Close()
 		}
-		_, drainErr = io.Copy(io.Discard, gzipReader)
-		gzipCloseErr = gzipReader.Close()
-		fileCloseErr = file.Close()
-		return errors.Join(drainErr, gzipCloseErr, fileCloseErr)
+		// Drain so the compressor's trailing checksum is verified.
+		_, drainErr = io.Copy(io.Discard, reader)
+		readerCloser, ok = reader.(io.Closer)
+		if ok {
+			readerErr = readerCloser.Close()
+		}
+		return errors.Join(drainErr, readerErr, file.Close())
 	}
 	return tar.NewReader(reader), closeArchive, nil
 }

@@ -5,11 +5,14 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"encoding/base64"
 	"encoding/binary"
 	"io"
 	"io/fs"
 	"os"
 	"testing"
+
+	"github.com/ulikunitz/xz"
 )
 
 type zipFixture struct {
@@ -27,6 +30,11 @@ type tarFixture struct {
 	Typeflag byte
 	Linkname string
 }
+
+const (
+	standaloneBzip2Fixture = "QlpoOTFBWSZTWVGUfRAAAAjRgAAQQAA+BYwQIAAxANAA1NGT1MyiL9yhg2QjCWFw/i7kinChIKMo+iA="
+	tarBzip2Fixture        = "QlpoOTFBWSZTWfQloq4AAHJ7gMqQCABAAWeAAEB6AZ5QCAggAFQ0p6Q0G1NGRgaQSUTR6jJoA0AfdRHoQNBCES5naZSuZAhwReN7xjYKtwiJkDh2kUPV7TCDgZCDq0rQXVi4ay6uw8iID8XckU4UJD0JaKuA"
+)
 
 func writeTARFixture(t *testing.T, path string, compressed bool, entries []tarFixture) {
 	t.Helper()
@@ -66,6 +74,72 @@ func writeTARFixture(t *testing.T, path string, compressed bool, entries []tarFi
 		}
 	}
 	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeTARXZFixture(t *testing.T, path string, entries []tarFixture) {
+	var (
+		archive   bytes.Buffer
+		tarWriter *tar.Writer
+		file      *os.File
+		xzWriter  *xz.Writer
+		err       error
+	)
+
+	t.Helper()
+
+	tarWriter = tar.NewWriter(&archive)
+	for _, entry := range entries {
+		header := &tar.Header{
+			Name:     entry.Name,
+			Mode:     int64(entry.Mode.Perm()),
+			Size:     int64(len(entry.Body)),
+			Typeflag: entry.Typeflag,
+			Linkname: entry.Linkname,
+		}
+		if err := tarWriter.WriteHeader(header); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.WriteString(tarWriter, entry.Body); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tarWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	file, err = os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	xzWriter, err = xz.NewWriter(file)
+	if err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if _, err := xzWriter.Write(archive.Bytes()); err != nil {
+		_ = xzWriter.Close()
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := xzWriter.Close(); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeBzip2Fixture(t *testing.T, path string, encoded string) {
+	t.Helper()
+
+	data, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
