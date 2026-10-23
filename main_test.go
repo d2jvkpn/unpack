@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -75,7 +76,7 @@ func TestRunShowsHelpAndParsesSupportedFlags(t *testing.T) {
 			t.Fatalf("run(--help) status = %d, stderr = %q", status, stderr.String())
 		}
 		for _, text := range []string{
-			"unpack [--cn] [--directory DIR] [--format FORMAT] [--overwrite] [--version] ARCHIVE [FILE...]",
+			"unpack [--cn] [--directory DIR] [--format FORMAT] [--list] [--overwrite] [--version] ARCHIVE [FILE...]",
 			"--cn",
 			"--directory, -d DIR",
 		} {
@@ -86,6 +87,39 @@ func TestRunShowsHelpAndParsesSupportedFlags(t *testing.T) {
 	})
 }
 
+func TestRunListsArchiveEntriesWithoutExtracting(t *testing.T) {
+	root := t.TempDir()
+	archivePath := filepath.Join(root, "bundle.zip")
+	writeZIPFixture(t, archivePath, []zipFixture{
+		{Name: "note.txt", Body: "content"},
+		{Name: "docs/guide.md", Body: "guide"},
+		{Name: "docs/readme.md", Body: "readme"},
+	})
+	outputDir := filepath.Join(root, "output")
+	var stdout, stderr bytes.Buffer
+
+	status := run([]string{"--list", "--directory", outputDir, archivePath}, &stdout, &stderr, root)
+
+	if status != 0 {
+		t.Fatalf("run() status = %d, stderr = %q", status, stderr.String())
+	}
+	if got, want := stdout.String(), "note.txt\ndocs/\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+	assertPathDoesNotExist(t, outputDir)
+}
+
+func TestParseTarListOutput(t *testing.T) {
+	entries := parseTarListOutput([]byte("node-v24.22.1-linux-x64/\nnode-v24.22.1-linux-x64/bin/node\n"))
+
+	if got, want := topLevelEntryNames(entries), []string{"node-v24.22.1-linux-x64/"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("topLevelEntryNames() = %#v, want %#v", got, want)
+	}
+}
+
 func TestRunRequiresAtLeastOneArchive(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	status := run(nil, &stdout, &stderr, t.TempDir())
@@ -93,7 +127,7 @@ func TestRunRequiresAtLeastOneArchive(t *testing.T) {
 	if status != 2 {
 		t.Fatalf("run() status = %d, want 2", status)
 	}
-	wantUsage := "Usage: unpack [--cn] [--directory DIR] [--format FORMAT] [--overwrite] [--version] ARCHIVE [FILE...]"
+	wantUsage := "Usage: unpack [--cn] [--directory DIR] [--format FORMAT] [--list] [--overwrite] [--version] ARCHIVE [FILE...]"
 	if !strings.Contains(stderr.String(), wantUsage) {
 		t.Fatalf("stderr = %q, want usage", stderr.String())
 	}

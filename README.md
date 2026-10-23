@@ -1,6 +1,6 @@
 # unpack
 
-Extract ZIP, TAR, TAR.GZ/TGZ, TAR.XZ/TXZ, and TAR.BZ2/TBZ2 archives, plus standalone Bzip2 files,
+Extract or list ZIP, TAR, TAR.GZ/TGZ, TAR.XZ/TXZ, and TAR.BZ2/TBZ2 archives, plus standalone Bzip2 files,
 with safe paths, a smart
 overridable output directory (`--directory`/`-d`), optional extraction of specific files, optional
 overwrite of existing files, and optional legacy Chinese filename decoding.
@@ -39,7 +39,7 @@ You can also copy the binary produced by the build command to a directory on you
 ## Usage
 
 ```text
-unpack [--cn] [--directory DIR] [--format FORMAT] [--overwrite] [--version] ARCHIVE [FILE...]
+unpack [--cn] [--directory DIR] [--format FORMAT] [--list] [--overwrite] [--version] ARCHIVE [FILE...]
 ```
 
 Exactly one archive is required, given as a local path or an `http://`/`https://` URL. A URL is
@@ -57,7 +57,9 @@ The final status is zero on success, one when the archive fails to process (incl
 matching nothing or a download failure), and two for invalid command usage.
 
 `--directory` has the short alias `-d`. `--format`, `--overwrite`, and `--version` have no short
-aliases.
+aliases. `--list` lists first-level archive entries, one path per line, without creating or
+modifying an extraction directory. Nested entries are represented by their top-level directory;
+it cannot be combined with file selectors.
 
 `--format zip|tar|tar.gz|tar.xz|tar.bz|bz` (aliases `tgz`, `txz`, `tbz2`, and `tbz`) skips detection.
 For `bz`, the decompressed single file is written using the input name without its `.bz` suffix;
@@ -71,6 +73,12 @@ directory, for example:
 ```text
 Extracting: photos.zip
 Output directory: /home/user/photos
+```
+
+List an archive without extracting it:
+
+```sh
+unpack --list photos.zip
 ```
 
 ## Version information
